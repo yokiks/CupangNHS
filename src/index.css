@@ -1,0 +1,73 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    @apply font-sans antialiased;
+  }
+  
+  /* Optimize scrolling performance */
+  * {
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+  
+  html {
+    scroll-behavior: smooth;
+  }
+}
+
+@layer utilities {
+  .text-gradient {
+    @apply bg-gradient-to-r from-primary-600 to-primary-500 bg-clip-text text-transparent;
+  }
+  
+  .animate-fade-in {
+    animation: fadeIn 1s ease-in;
+    will-change: opacity;
+  }
+  
+  .animate-fade-in-up {
+    animation: fadeInUp 1s ease-out;
+    will-change: opacity, transform;
+  }
+  
+  .animate-fade-in-up-delay {
+    animation: fadeInUp 1s ease-out 0.3s both;
+    will-change: opacity, transform;
+  }
+  
+  .animate-fade-in-up-delay-2 {
+    animation: fadeInUp 1s ease-out 0.5s both;
+    will-change: opacity, transform;
+  }
+  
+  /* GPU acceleration for smooth scrolling */
+  .gpu-accelerated {
+    transform: translateZ(0);
+    backface-visibility: hidden;
+    perspective: 1000px;
+  }
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 20px, 0);
+  }
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+  }
+}
+

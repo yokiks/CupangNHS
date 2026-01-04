@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>About School - CuNHS</title>
+    <link rel="stylesheet" href="style.css">
+    <link rel="icon" href="images/cnhs_logo.png" type="image/png">
+</head>
+  <body>
+        <nav class="navbar">
+            <div class="logo">
+            <img src="images/cunhs_logo.png" alt="School Logo">
+            <span>Cupang National High School</span>
+            </div>
+            <ul class="nav-links">
+            <li><a href="index.html">Home</a></li>
+            <li><a href="about.html">About School</a></li>
+            <li><a href="concerns.html" class="active">Student Concerns</a></li>
+            </ul>
+        </nav>
+<div class="register-wrapper">
+  <div class="register-container">
+    <h2>Create an account</h2>
+    <p>It’s quick and easy.</p>
+
+    <form>
+      <div class="form-group">
+        <label for="fname">First Name</label>
+        <input type="text" id="fname" name="fname">
+      </div>
+      <div class="form-group">
+        <label for="lname">Last Name</label>
+        <input type="text" id="lname" name="lname">
+      </div>
+      <div class="form-group">
+        <label for="role">Register as</label>
+        <select id="role" name="role">
+          <option value="student">Student</option>
+          <option value="admin">Guidance Counselor</option>
+        </select>
+      </div>
+
+              <!-- Student ID (hidden by default) -->
+        <div class="form-group hidden" id="studentIdGroup">
+          <label for="studentId">Student LRN / ID</label>
+          <input type="text" id="studentId" name="studentId">
+        </div>
+
+      <div class="form-group">
+        <label for="email">Username</label>
+        <input type="text" id="email" name="email">
+      </div>
+      <div class="form-group">
+        <label for="password">Password</label>
+        <input type="password" id="password" name="password">
+      </div>
+
+      <button type="submit" class="btn-submit">Sign Up</button>
+    </form>
+
+    <div class="extra">
+      <p>Already have an account? <a href="login.html">Log In</a></p>
+    </div>
+  </div>
+</div>
+
+      <footer>
+        <div class="footer-content">
+          <a href="https://www.facebook.com/DepEdTayoCuNHS301420" class="facebook" target="_blank">
+            <img src="images/facebook.png" alt="Facebook Logo"> 
+            DepEd Tayo Cupang NHS – Antipolo City
+          </a>
+          <p>© 2025 Cupang National High School. All Rights Reserved.</p>
+        </div>
+      </footer> 
+
+        <script>
+    const roleSelect = document.getElementById("role");
+    const studentIdGroup = document.getElementById("studentIdGroup");
+    const studentIdInput = document.getElementById("studentId");
+
+    roleSelect.addEventListener("change", () => {
+      if (roleSelect.value === "student") {
+        studentIdGroup.classList.remove("hidden");
+        studentIdInput.setAttribute("required", "required");
+      } else {
+        studentIdGroup.classList.add("hidden");
+        studentIdInput.removeAttribute("required");
+      }
+    });
+  </script>
+  </body>
+</html>
