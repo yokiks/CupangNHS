@@ -106,28 +106,44 @@ const About = () => {
           </div>
         </div>
 
-        {/* Organizational Chart */}
-        <section className="bg-white rounded-2xl shadow-xl p-8 md:p-12 mb-16">
-          <div className="text-center mb-8">
-            <h2 className="text-3xl md:text-4xl font-bold text-primary-700 mb-4">Organizational Chart</h2>
-            <div className="w-24 h-1 bg-gradient-to-r from-primary-500 to-primary-700 mx-auto mb-4"></div>
-            <p className="text-gray-600 text-lg max-w-2xl mx-auto">
-              The Organizational Chart of Cupang National High School shows the structure of leadership, teachers, and staff working together to provide quality education and support for students.
-            </p>
-          </div>
-          <div className="flex justify-center">
-            <div className="relative group">
-              <div className="absolute -inset-4 bg-gradient-to-r from-primary-400 to-primary-600 rounded-2xl opacity-20 group-hover:opacity-30 blur transition-opacity"></div>
-              <img 
-                src="/images/org_chart.jpg" 
-                alt="Organizational Chart" 
-                className="relative max-w-full h-auto rounded-xl shadow-lg hover:shadow-2xl transition-shadow duration-300"
-              />
+          {/* Organizational Chart */}
+          <section className="bg-white rounded-2xl shadow-xl p-8 md:p-12 mb-16">
+            <div className="text-center mb-8">
+              <h2 className="text-3xl md:text-4xl font-bold text-primary-700 mb-4">
+                Organizational Chart
+              </h2>
+              <div className="w-24 h-1 bg-gradient-to-r from-primary-500 to-primary-700 mx-auto mb-4"></div>
+              <p className="text-gray-600 text-lg max-w-2xl mx-auto">
+                The Organizational Chart of Cupang National High School shows the structure of leadership, teachers, and staff working together to provide quality education and support for students.
+              </p>
             </div>
-          </div>
-        </section>
 
-        {/* School Gallery */}
+            <div className="flex justify-center">
+              <div className="relative group overflow-hidden rounded-xl shadow-lg hover:shadow-2xl transition-all duration-300">
+                
+                {/* Image */}
+                <img
+                  src="/images/organization.jpg"
+                  alt="Organizational Chart"
+                  className="max-w-full h-auto transform group-hover:scale-110 transition-transform duration-500"
+                />
+
+                {/* Dark Overlay */}
+                <div className="absolute inset-0 bg-gradient-to-t from-primary-900/80 to-primary-900/20 opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
+
+                {/* Hover Text */}
+                <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-300">
+                  <p className="text-white text-lg md:text-xl font-semibold text-center px-6">
+                    Cupang National High School Organizational Structure
+                  </p>
+                </div>
+
+              </div>
+            </div>
+          </section>
+
+        {
+        /* School Gallery
         <section className="bg-gradient-to-br from-primary-50 to-white rounded-2xl shadow-xl p-8 md:p-12 mb-16">
           <div className="text-center mb-10">
             <h2 className="text-3xl md:text-4xl font-bold text-primary-700 mb-4">School Gallery</h2>
@@ -145,6 +161,89 @@ const About = () => {
                   className="w-full h-48 md:h-64 object-cover transform group-hover:scale-110 transition-transform duration-500"
                 />
                 <div className="absolute inset-0 bg-gradient-to-t from-primary-900 to-transparent opacity-0 group-hover:opacity-70 transition-opacity duration-300"></div>
+              </div>
+            ))}
+          </div>  
+        </section> */}
+
+        {/* School Gallery
+        <section className="bg-gradient-to-br from-primary-50 to-white rounded-2xl shadow-xl p-8 md:p-12 mb-16">
+          <div className="text-center mb-10">
+            <h2 className="text-3xl md:text-4xl font-bold text-primary-700 mb-4">
+              School Gallery
+            </h2>
+            <div className="w-24 h-1 bg-gradient-to-r from-primary-500 to-primary-700 mx-auto mb-4"></div>
+            <p className="text-gray-600 text-lg">
+              Take a look at some highlights from Cupang National High School.
+            </p>
+          </div>
+
+          {/* Gallery Images */}
+          {/* <div className="grid grid-cols-2 md:grid-cols-3 gap-4 md:gap-6">
+            {[
+              "/images/school1.jpg",
+              "/images/school2.jpg",
+              "/images/school3.jpg",
+              "/images/school4.jpg",
+              "/images/school5.jpg",
+              "/images/school6.jpg",
+            ].map((img, index) => (
+              <div
+                key={index}
+                className="relative group overflow-hidden rounded-xl shadow-lg hover:shadow-2xl transition-all duration-300"
+              >
+                <img
+                  src={img}
+                  alt={`School ${index + 1}`}
+                  className="w-full h-48 md:h-64 object-cover transform group-hover:scale-110 transition-transform duration-500"
+                />
+                <div className="absolute inset-0 bg-gradient-to-t from-primary-900 to-transparent opacity-0 group-hover:opacity-70 transition-opacity duration-300"></div>
+              </div>
+            ))}
+          </div>
+        </section> */}
+
+        {/* School Gallery */}
+        <section className="bg-gradient-to-br from-primary-50 to-white rounded-2xl shadow-xl p-8 md:p-12 mb-16">
+          <div className="text-center mb-10">
+            <h2 className="text-3xl md:text-4xl font-bold text-primary-700 mb-4">
+              School Gallery
+            </h2>
+            <div className="w-24 h-1 bg-gradient-to-r from-primary-500 to-primary-700 mx-auto mb-4"></div>
+            <p className="text-gray-600 text-lg">
+              Take a look at some highlights from Cupang National High School.
+            </p>
+          </div>
+
+          {/* Gallery Images */}
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-4 md:gap-6">
+            {[
+              { src: "/images/campus.jpg", text: "School Campus" },
+              { src: "/images/activities.jpg", text: "Classroom Activities" },
+              { src: "/images/events.jpg", text: "School Events" },
+              { src: "/images/programs.jpg", text: "Student Programs" },
+              { src: "/images/facilities.jpg", text: "Facilities" },
+              { src: "/images/excellence.jpg", text: "Academic Excellence" },
+            ].map((item, index) => (
+              <div
+                key={index}
+                className="relative group overflow-hidden rounded-xl shadow-lg hover:shadow-2xl transition-all duration-300"
+              >
+                <img
+                  src={item.src}
+                  alt={item.text}
+                  className="w-full h-48 md:h-64 object-cover transform group-hover:scale-110 transition-transform duration-500"
+                />
+
+                {/* Dark Overlay */}
+                <div className="absolute inset-0 bg-gradient-to-t from-primary-900/80 to-primary-900/20 opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
+
+                {/* Hover Text */}
+                <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-300">
+                  <p className="text-white text-lg md:text-xl font-semibold text-center px-4">
+                    {item.text}
+                  </p>
+                </div>
               </div>
             ))}
           </div>

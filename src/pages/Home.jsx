@@ -184,9 +184,9 @@ const Home = () => {
                         />
                       </div>
                     </div>
-                    <h4 className="font-bold text-gray-800 text-lg mb-3">Phone</h4>
+                    <h4 className="font-bold text-gray-800 text-lg mb-3">Tel No.</h4>
                     <p className="text-sm text-primary-600 font-semibold leading-relaxed">
-                      09#######13
+                      (02)7120-5569
                     </p>
                     <div className="mt-4 text-xs text-gray-500 flex items-center">
                       <svg className="w-4 h-4 mr-1" fill="currentColor" viewBox="0 0 20 20">
