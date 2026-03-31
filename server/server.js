@@ -1,43 +1,10 @@
 import "dotenv/config";
-import express from "express";
-import cors from "cors";
-import authRoutes from "./routes/authRoutes.js";
-import concernRoutes from "./routes/concernRoutes.js";
-import notificationRoutes from "./routes/notificationRoutes.js";
+import app from "./app.js";
 import bcrypt from "bcryptjs";
 import pool from "./config/db.js";
-import path from "path";
-import { fileURLToPath } from "url";
+import knex from "./db/knex.js";
 
-const app = express();
 const PORT = process.env.PORT || 5000;
-const CLIENT_ORIGIN = process.env.CLIENT_ORIGIN || "http://localhost:3000";
-
-app.use(
-    cors({
-        origin: CLIENT_ORIGIN,
-        credentials: true,
-    })
-);
-app.use(express.json());
-
-// Serve uploaded files
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-app.use("/uploads", express.static(path.join(__dirname, "uploads")));
-
-app.get("/api/health", (req, res) => {
-    res.json({ status: "ok", timestamp: new Date().toISOString() });
-});
-
-app.use("/api/auth", authRoutes);
-app.use("/api/concerns", concernRoutes);
-app.use("/api/notifications", notificationRoutes);
-
-app.use((err, req, res, next) => {
-    console.error(err);
-    res.status(err.status || 500).json({ message: err.message || "Internal server error." });
-});
 
 async function ensureGuidanceCounselorAdmin() {
     const username = process.env.GUIDANCE_ADMIN_USERNAME || "CuNHSadmin";
@@ -49,7 +16,6 @@ async function ensureGuidanceCounselorAdmin() {
     try {
         const conn = await pool.getConnection();
         try {
-            // Ensure required columns exist (idempotent)
             try {
                 await conn.query("ALTER TABLE users ADD COLUMN email VARCHAR(150)");
             } catch (err) {
@@ -58,7 +24,6 @@ async function ensureGuidanceCounselorAdmin() {
                 }
             }
 
-            // Check if admin user exists
             const [rows] = await conn.query(
                 "SELECT id FROM users WHERE username = ? OR email = ? LIMIT 1",
                 [username, email]
@@ -86,8 +51,20 @@ async function ensureGuidanceCounselorAdmin() {
     }
 }
 
-app.listen(PORT, () => {
-    console.log(`Server running on port ${PORT}`);
-    // Seed guidance counselor admin account if missing
-    ensureGuidanceCounselorAdmin();
-});
+async function startServer() {
+    try {
+        console.log("Running database migrations...");
+        await knex.migrate.latest();
+        console.log("Migrations complete.");
+    } catch (error) {
+        console.error("Migration failed:", error);
+        console.log("Server will start anyway — tables may already exist.");
+    }
+
+    app.listen(PORT, () => {
+        console.log(`Server running on port ${PORT}`);
+        ensureGuidanceCounselorAdmin();
+    });
+}
+
+startServer();

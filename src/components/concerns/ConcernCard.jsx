@@ -1,0 +1,93 @@
+const STATUS_COLORS = {
+  pending: 'bg-gray-100 text-gray-800',
+  read: 'bg-blue-100 text-blue-800',
+  in_review: 'bg-yellow-100 text-yellow-800',
+  resolved: 'bg-green-100 text-green-800',
+}
+
+const STATUS_LABELS = {
+  pending: 'Pending',
+  read: 'Read',
+  in_review: 'In Review',
+  resolved: 'Resolved',
+}
+
+const STATUS_FLOW = ['pending', 'read', 'in_review', 'resolved']
+
+const ConcernCard = ({ concern, isCounselor, onStatusUpdate, onDelete, onViewReport }) => {
+  const currentIndex = STATUS_FLOW.indexOf(concern.status)
+
+  return (
+    <div
+      className="border border-gray-200 rounded-lg p-4 hover:shadow-md transition cursor-pointer"
+      onClick={() => isCounselor && onViewReport?.(concern)}
+    >
+      <div className="flex justify-between items-start mb-2">
+        <div className="flex-1">
+          <h3 className="text-xl font-semibold text-gray-800 mb-1">{concern.title}</h3>
+          {isCounselor && (
+            <p className="text-sm text-gray-600 flex items-center gap-2">
+              <span>
+                Submitted by: {concern.firstName} {concern.lastName}
+                {concern.studentId && ` (LRN: ${concern.studentId})`}
+              </span>
+              {concern.concernCount != null && concern.concernCount >= 2 && (
+                <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-bold ${
+                  concern.concernCount >= 4 ? 'bg-red-100 text-red-700' :
+                  concern.concernCount >= 2 ? 'bg-amber-100 text-amber-700' :
+                  'bg-gray-100 text-gray-600'
+                }`}>
+                  <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20"><path d="M3 6a3 3 0 013-3h10l-4 4 4 4H6a3 3 0 01-3-3V6z" /></svg>
+                  {concern.concernCount} reports
+                </span>
+              )}
+            </p>
+          )}
+        </div>
+        <span className={`px-3 py-1 rounded-full text-xs font-semibold ${STATUS_COLORS[concern.status] || STATUS_COLORS.pending}`}>
+          {STATUS_LABELS[concern.status] || concern.status}
+        </span>
+      </div>
+
+      <p className="text-gray-600 mb-3">{concern.description}</p>
+
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-3">
+        <div className="flex gap-4 text-sm text-gray-500">
+          <span>Category: <span className="font-semibold capitalize">{concern.category}</span></span>
+          <span>Created: {new Date(concern.createdAt).toLocaleDateString()}</span>
+        </div>
+
+        {isCounselor && (
+          <div className="flex flex-wrap gap-2" onClick={(e) => e.stopPropagation()}>
+            <button
+              onClick={() => onViewReport?.(concern)}
+              className="px-3 py-1 text-xs bg-green-600 text-white rounded hover:bg-green-700 transition font-semibold"
+            >
+              View / Review
+            </button>
+            {STATUS_FLOW.map((status, index) => {
+              if (index <= currentIndex) return null
+              return (
+                <button
+                  key={status}
+                  onClick={() => onStatusUpdate?.(concern.id, status)}
+                  className="px-3 py-1 text-xs bg-primary-100 text-primary-700 rounded hover:bg-primary-200 transition"
+                >
+                  Mark as {STATUS_LABELS[status]}
+                </button>
+              )
+            })}
+            <button
+              onClick={() => onDelete?.(concern.id)}
+              className="px-3 py-1 text-xs bg-red-100 text-red-700 rounded hover:bg-red-200 transition"
+            >
+              Delete
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+export default ConcernCard

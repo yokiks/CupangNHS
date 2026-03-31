@@ -46,6 +46,9 @@ export const registerUser = async (req, res) => {
             studentId,
             studentEmail,
             guidanceEmail,
+            parentName,
+            parentEmail,
+            parentContact,
         } = req.body;
         // Only students can self-register; guidance counselors will be provisioned by admins
         const allowedRoles = ["student"];
@@ -111,9 +114,9 @@ export const registerUser = async (req, res) => {
 
             const passwordHash = await bcrypt.hash(password, 10);
             const [insertResult] = await conn.query(
-                `INSERT INTO users (first_name, last_name, username, password_hash, role, lrn, email)
-                 VALUES (?, ?, ?, ?, ?, ?, ?)`,
-                [firstName, lastName, username, passwordHash, role, lrn || null, email]
+                `INSERT INTO users (first_name, last_name, username, password_hash, role, lrn, email, parent_name, parent_email, parent_contact)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                [firstName, lastName, username, passwordHash, role, lrn || null, email, parentName || null, parentEmail || null, parentContact || null]
             );
 
             const user = {

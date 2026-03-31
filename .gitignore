@@ -9,6 +9,10 @@ build/
 # Environment variables
 .env
 .env.local
+.env.test
+
+# Test results
+test-results/
 
 # Database
 *.db
@@ -30,3 +34,4 @@ Thumbs.db
 *.log
 npm-debug.log*
 
+CODEBASE.md

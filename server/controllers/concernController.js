@@ -2,30 +2,38 @@ import pool from "../config/db.js";
 import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
+import { broadcast, broadcastToRole, sendToUser } from "../services/sseManager.js";
+import { sendParentConcernNotificationEmail, isMailConfigured } from "../services/mailService.js";
 
 const STATUS_FLOW = ["pending", "read", "in_review", "resolved"];
 
-const buildConcernResponse = (record) => ({
-    id: record.id,
-    title: record.title,
-    description: record.description,
-    category: record.category,
-    status: record.status,
-    createdAt: record.created_at,
-    updatedAt: record.updated_at,
-    userId: record.user_id,
-    firstName: record.first_name,
-    lastName: record.last_name,
-    studentId: record.lrn,
-    student: record.first_name
-        ? {
-              id: record.user_id,
-              firstName: record.first_name,
-              lastName: record.last_name,
-              lrn: record.lrn,
-          }
-        : undefined,
-});
+const buildConcernResponse = (record) => {
+    const resp = {
+        id: record.id,
+        title: record.title,
+        description: record.description,
+        category: record.category,
+        status: record.status,
+        createdAt: record.created_at,
+        updatedAt: record.updated_at,
+        userId: record.user_id,
+        firstName: record.first_name,
+        lastName: record.last_name,
+        studentId: record.lrn,
+        student: record.first_name
+            ? {
+                  id: record.user_id,
+                  firstName: record.first_name,
+                  lastName: record.last_name,
+                  lrn: record.lrn,
+              }
+            : undefined,
+    };
+    if (record.concern_count !== undefined) {
+        resp.concernCount = Number(record.concern_count);
+    }
+    return resp;
+};
 
 export const createConcern = async (req, res) => {
     try {
@@ -37,25 +45,6 @@ export const createConcern = async (req, res) => {
 
         const conn = await pool.getConnection();
         try {
-            // Ensure attachments table exists (idempotent)
-            try {
-                await conn.query(`
-                    CREATE TABLE IF NOT EXISTS concern_attachments (
-                        id INT AUTO_INCREMENT PRIMARY KEY,
-                        concern_id INT NOT NULL,
-                        original_name VARCHAR(255) NOT NULL,
-                        stored_name VARCHAR(255) NOT NULL,
-                        mime_type VARCHAR(150) NOT NULL,
-                        size INT NOT NULL,
-                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                        FOREIGN KEY (concern_id) REFERENCES concerns(id) ON DELETE CASCADE
-                    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
-                `);
-            } catch (e) {
-                // ignore
-            }
-
-            // Prevent duplicate pending concerns with same title for the same student
             const [existing] = await conn.query(
                 `SELECT id FROM concerns 
                  WHERE user_id = ? AND title = ? AND status IN ('pending', 'read', 'in_review') LIMIT 1`,
@@ -74,7 +63,13 @@ export const createConcern = async (req, res) => {
                 [req.user.id, title, description, category || "general"]
             );
 
-            // Save attachments if provided
+            // Record initial status in history
+            await conn.query(
+                `INSERT INTO concern_status_history (concern_id, changed_by, old_status, new_status)
+                 VALUES (?, ?, NULL, 'pending')`,
+                [result.insertId, req.user.id]
+            );
+
             const files = Array.isArray(req.files) ? req.files : [];
             if (files.length > 0) {
                 const __filename = fileURLToPath(import.meta.url);
@@ -99,8 +94,17 @@ export const createConcern = async (req, res) => {
                 }
             }
 
-            const [rows] = await conn.query("SELECT * FROM concerns WHERE id = ?", [result.insertId]);
-            return res.status(201).json(buildConcernResponse(rows[0]));
+            const [rows] = await conn.query(
+                `SELECT c.*, u.first_name, u.last_name, u.lrn
+                 FROM concerns c JOIN users u ON c.user_id = u.id
+                 WHERE c.id = ?`,
+                [result.insertId]
+            );
+            const concern = buildConcernResponse(rows[0]);
+
+            broadcast("concern:new", concern);
+
+            return res.status(201).json(concern);
         } finally {
             conn.release();
         }
@@ -116,15 +120,16 @@ export const getConcerns = async (req, res) => {
         const conn = await pool.getConnection();
         try {
             const params = [];
-            let query =
-                req.user.role === "guidance_counselor"
-                    ? `SELECT c.*, u.first_name, u.last_name, u.lrn 
-                       FROM concerns c 
-                       JOIN users u ON c.user_id = u.id 
-                       WHERE 1=1`
-                    : `SELECT * FROM concerns WHERE user_id = ?`;
+            const isCounselor = req.user.role === "guidance_counselor";
+            let query = isCounselor
+                ? `SELECT c.*, u.first_name, u.last_name, u.lrn,
+                          (SELECT COUNT(*) FROM concerns c2 WHERE c2.user_id = c.user_id) AS concern_count
+                   FROM concerns c 
+                   JOIN users u ON c.user_id = u.id 
+                   WHERE 1=1`
+                : `SELECT c.* FROM concerns c WHERE c.user_id = ?`;
 
-            if (req.user.role !== "guidance_counselor") {
+            if (!isCounselor) {
                 params.push(req.user.id);
             }
 
@@ -134,14 +139,14 @@ export const getConcerns = async (req, res) => {
             }
 
             if (category) {
-                query += req.user.role === "guidance_counselor" ? " AND c.category = ?" : " AND category = ?";
+                query += " AND c.category = ?";
                 params.push(category);
             }
 
             const sortableColumns = ["created_at", "updated_at", "status", "category"];
             const column = sortableColumns.includes(sortBy) ? sortBy : "created_at";
             const order = sortOrder?.toUpperCase() === "ASC" ? "ASC" : "DESC";
-            query += ` ORDER BY ${column} ${order}`;
+            query += ` ORDER BY c.${column} ${order}`;
 
             const [rows] = await conn.query(query, params);
             return res.json(rows.map(buildConcernResponse));
@@ -185,9 +190,17 @@ export const updateConcernStatus = async (req, res) => {
             }
 
             const concern = concerns[0];
+            const oldStatus = concern.status;
+
             await conn.query(
                 "UPDATE concerns SET status = ?, updated_at = NOW() WHERE id = ?",
                 [status, id]
+            );
+
+            await conn.query(
+                `INSERT INTO concern_status_history (concern_id, changed_by, old_status, new_status)
+                 VALUES (?, ?, ?, ?)`,
+                [id, req.user.id, oldStatus, status]
             );
 
             const statusMessages = {
@@ -205,7 +218,16 @@ export const updateConcernStatus = async (req, res) => {
             );
 
             const [updatedRows] = await conn.query("SELECT * FROM concerns WHERE id = ?", [id]);
-            return res.json(buildConcernResponse(updatedRows[0]));
+            const updated = buildConcernResponse(updatedRows[0]);
+
+            const ssePayload = { concernId: Number(id), newStatus: status, updatedAt: updated.updatedAt };
+            sendToUser(concern.user_id, "concern:statusUpdate", ssePayload);
+            broadcast("concern:statusUpdate", ssePayload);
+            sendToUser(concern.user_id, "notification:new", {
+                message: `${concern.title} — ${statusMessages[status]}`,
+            });
+
+            return res.json(updated);
         } finally {
             conn.release();
         }
@@ -229,7 +251,11 @@ export const deleteConcern = async (req, res) => {
                 return res.status(403).json({ message: "You cannot delete this concern." });
             }
 
+            const studentUserId = rows[0].user_id;
             await conn.query("DELETE FROM concerns WHERE id = ?", [id]);
+
+            broadcast("concern:deleted", { concernId: Number(id) });
+
             return res.json({ message: "Concern deleted." });
         } finally {
             conn.release();
@@ -300,3 +326,87 @@ export const generateConcernReport = async (req, res) => {
     }
 };
 
+export const getFlaggedStudents = async (req, res) => {
+    try {
+        const conn = await pool.getConnection();
+        try {
+            const [rows] = await conn.query(
+                `SELECT u.id, u.first_name, u.last_name, u.lrn,
+                        COUNT(c.id) AS concern_count
+                 FROM concerns c
+                 JOIN users u ON c.user_id = u.id
+                 GROUP BY u.id
+                 HAVING concern_count >= 1
+                 ORDER BY concern_count DESC`
+            );
+            return res.json(
+                rows.map((r) => ({
+                    id: r.id,
+                    firstName: r.first_name,
+                    lastName: r.last_name,
+                    lrn: r.lrn,
+                    concernCount: Number(r.concern_count),
+                }))
+            );
+        } finally {
+            conn.release();
+        }
+    } catch (error) {
+        console.error("getFlaggedStudents error:", error);
+        return res.status(500).json({ message: "Unable to fetch flagged students." });
+    }
+};
+
+export const notifyParent = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const conn = await pool.getConnection();
+        try {
+            const [rows] = await conn.query(
+                `SELECT c.title, c.category, c.status,
+                        u.first_name, u.last_name, u.parent_email, u.parent_name
+                 FROM concerns c
+                 JOIN users u ON c.user_id = u.id
+                 WHERE c.id = ?`,
+                [id]
+            );
+
+            if (!rows.length) {
+                return res.status(404).json({ message: "Concern not found." });
+            }
+
+            const concern = rows[0];
+
+            if (!concern.parent_email) {
+                return res.status(400).json({ message: "No parent email on file for this student." });
+            }
+
+            if (!isMailConfigured()) {
+                return res.status(503).json({ message: "Email service is not configured. Please set up Gmail OAuth in .env." });
+            }
+
+            const counselorName = `${req.user.firstName} ${req.user.lastName}`;
+            await sendParentConcernNotificationEmail({
+                to: concern.parent_email,
+                parentName: concern.parent_name || "Parent/Guardian",
+                studentName: `${concern.first_name} ${concern.last_name}`,
+                concernTitle: concern.title,
+                concernCategory: concern.category,
+                counselorName,
+            });
+
+            await conn.query(
+                `INSERT INTO notifications (user_id, concern_id, message, type)
+                 VALUES ((SELECT user_id FROM concerns WHERE id = ?), ?, ?, 'info')`,
+                [id, id, `Parent/guardian has been notified about: ${concern.title}`]
+            );
+
+            return res.json({ message: "Parent notification email sent successfully." });
+        } finally {
+            conn.release();
+        }
+    } catch (error) {
+        console.error("notifyParent error:", error);
+        return res.status(500).json({ message: "Unable to send parent notification." });
+    }
+};

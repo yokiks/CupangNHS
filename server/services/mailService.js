@@ -65,6 +65,16 @@ async function fetchAccessToken(clientId, clientSecret, refreshToken, redirectUr
     throw new Error(lastErr?.error_description || lastErr?.error || "token_exchange_failed");
 }
 
+export function isMailConfigured() {
+    const user = readEnv("GMAIL_USER") || readEnv("GMAIL_FROM");
+    return Boolean(
+        user &&
+            readEnv("GMAIL_CLIENT_ID") &&
+            readEnv("GMAIL_CLIENT_SECRET") &&
+            readEnv("GMAIL_REFRESH_TOKEN")
+    );
+}
+
 /** Gmail OAuth2: all four env vars must be present. */
 export function isPasswordResetMailConfigured() {
     const user = readEnv("GMAIL_USER") || readEnv("GMAIL_FROM");
@@ -155,5 +165,89 @@ export async function sendPasswordResetEmail({ to, resetUrl }) {
     }
 
     console.log("Password reset email sent to", to);
+    return { sent: true };
+}
+
+export async function sendParentConcernNotificationEmail({
+    to,
+    parentName,
+    studentName,
+    concernTitle,
+    concernCategory,
+    counselorName,
+}) {
+    if (!isMailConfigured()) {
+        console.warn("Parent notification email skipped: Gmail OAuth not configured.");
+        return { sent: false, reason: "not_configured" };
+    }
+
+    const oauthUser = readEnv("GMAIL_USER") || readEnv("GMAIL_FROM");
+    const clientId = readEnv("GMAIL_CLIENT_ID");
+    const clientSecret = readEnv("GMAIL_CLIENT_SECRET");
+    const refreshToken = readEnv("GMAIL_REFRESH_TOKEN");
+    const redirectUri = readEnv("GMAIL_OAUTH_REDIRECT_URI") || DEFAULT_PLAYGROUND_REDIRECT;
+
+    const accessToken = await fetchAccessToken(clientId, clientSecret, refreshToken, redirectUri);
+
+    const fromName = readEnv("GMAIL_FROM_NAME") || "Cupang National High School";
+    const fromAddress = readEnv("GMAIL_FROM") || oauthUser;
+
+    const transporter = nodemailer.createTransport({
+        host: "smtp.gmail.com",
+        port: 465,
+        secure: true,
+        auth: {
+            type: "OAuth2",
+            user: oauthUser,
+            clientId,
+            clientSecret,
+            refreshToken,
+            accessToken,
+        },
+    });
+
+    const categoryLabel = concernCategory
+        ? concernCategory.charAt(0).toUpperCase() + concernCategory.slice(1)
+        : "General";
+
+    await transporter.sendMail({
+        from: `"${fromName}" <${fromAddress}>`,
+        to,
+        subject: `Guidance Office Notice — Concern Filed for ${studentName}`,
+        text:
+            `Dear ${parentName},\n\n` +
+            `This is to inform you that the Guidance Office of Cupang National High School is currently ` +
+            `addressing a concern involving your child, ${studentName}.\n\n` +
+            `Concern: ${concernTitle}\nCategory: ${categoryLabel}\n\n` +
+            `The guidance counselor handling this matter is ${counselorName}. ` +
+            `You may visit or contact the school guidance office for more details.\n\n` +
+            `Thank you for your continued support.\n\n` +
+            `Respectfully,\nCupang National High School Guidance Office`,
+        html: `
+            <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;border:1px solid #e5e7eb;border-radius:12px;overflow:hidden">
+                <div style="background:#16a34a;padding:24px;text-align:center">
+                    <h1 style="color:#fff;margin:0;font-size:20px">Cupang National High School</h1>
+                    <p style="color:#d1fae5;margin:4px 0 0;font-size:13px">Guidance Office</p>
+                </div>
+                <div style="padding:24px">
+                    <p>Dear <strong>${parentName}</strong>,</p>
+                    <p>This is to inform you that the Guidance Office is currently addressing a concern involving your child, <strong>${studentName}</strong>.</p>
+                    <table style="width:100%;border-collapse:collapse;margin:16px 0">
+                        <tr><td style="padding:8px;border:1px solid #e5e7eb;font-weight:bold;background:#f9fafb">Concern</td><td style="padding:8px;border:1px solid #e5e7eb">${concernTitle}</td></tr>
+                        <tr><td style="padding:8px;border:1px solid #e5e7eb;font-weight:bold;background:#f9fafb">Category</td><td style="padding:8px;border:1px solid #e5e7eb">${categoryLabel}</td></tr>
+                        <tr><td style="padding:8px;border:1px solid #e5e7eb;font-weight:bold;background:#f9fafb">Counselor</td><td style="padding:8px;border:1px solid #e5e7eb">${counselorName}</td></tr>
+                    </table>
+                    <p>You may visit or contact the school guidance office for more details.</p>
+                    <p style="margin-top:24px">Thank you for your continued support.</p>
+                    <p style="margin-top:16px;color:#6b7280;font-size:13px">Respectfully,<br><strong>Cupang National High School Guidance Office</strong></p>
+                </div>
+                <div style="background:#f9fafb;padding:12px;text-align:center;font-size:11px;color:#9ca3af">
+                    This is an automated message. Please do not reply to this email.
+                </div>
+            </div>
+        `,
+    });
+
+    console.log("Parent notification email sent to", to);
     return { sent: true };
 }

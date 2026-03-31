@@ -11,7 +11,31 @@ const NotificationFab = () => {
     refresh()
     const interval = setInterval(() => {
       refresh(false)
-    }, 5000) // poll more frequently to feel real-time
+    }, 30000)
+
+    const token = localStorage.getItem('token')
+    let es = null
+    if (token) {
+      const baseUrl = (import.meta.env.VITE_API_BASE_URL || window.location.origin)
+      es = new EventSource(`${baseUrl}/api/concerns/events?token=${encodeURIComponent(token)}`)
+      es.addEventListener('notification:new', (e) => {
+        try {
+          const data = JSON.parse(e.data)
+          const local = {
+            id: `sse-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+            message: data.message || 'Update',
+            read: false,
+            createdAt: new Date().toISOString()
+          }
+          setNotifications(prev => [local, ...prev])
+          setUnreadCount(prev => prev + 1)
+        } catch { /* ignore */ }
+      })
+      es.addEventListener('concern:statusUpdate', () => refresh(false))
+      es.addEventListener('concern:new', () => refresh(false))
+      es.onerror = () => { es.close() }
+    }
+
     const onExternalRefresh = () => refresh(false)
     const onPush = (e) => {
       const detail = e?.detail || {}
@@ -28,6 +52,7 @@ const NotificationFab = () => {
     window.addEventListener('notifications:push', onPush)
     return () => {
       clearInterval(interval)
+      if (es) es.close()
       window.removeEventListener('notifications:refresh', onExternalRefresh)
       window.removeEventListener('notifications:push', onPush)
     }

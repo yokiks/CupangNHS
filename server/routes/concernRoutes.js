@@ -6,11 +6,16 @@ import {
     updateConcernStatus,
     deleteConcern,
     generateConcernReport,
-    // new details handler added below
+    getFlaggedStudents,
+    notifyParent,
 } from "../controllers/concernController.js";
+import {
+    saveConcernReport,
+    getConcernReport,
+} from "../controllers/reportController.js";
 import { authenticate, authorize } from "../middleware/authMiddleware.js";
+import { addClient, removeClient } from "../services/sseManager.js";
 
-// Configure multer to parse multipart forms (fields + optional files)
 const upload = multer({
     storage: multer.memoryStorage(),
     limits: { fileSize: 10 * 1024 * 1024, files: 10 },
@@ -18,58 +23,43 @@ const upload = multer({
 
 const router = express.Router();
 
+router.get("/events", authenticate, (req, res) => {
+    res.writeHead(200, {
+        "Content-Type": "text/event-stream",
+        "Cache-Control": "no-cache",
+        Connection: "keep-alive",
+    });
+    res.write(":\n\n");
+
+    res._sseRole = req.user.role;
+    addClient(req.user.id, res);
+
+    const heartbeat = setInterval(() => {
+        res.write(":\n\n");
+    }, 30000);
+
+    req.on("close", () => {
+        clearInterval(heartbeat);
+        removeClient(req.user.id, res);
+    });
+});
+
 router.use(authenticate);
 
 router
     .route("/")
-    .get(getConcerns) // students see their concerns, counselors see all
-    // Accept multipart so req.body has fields when files are attached
+    .get(getConcerns)
     .post(authorize(["student", "guidance_counselor"]), upload.array("files"), createConcern);
 
-// Provide concern details with attachments for report view
-router.get("/:id/details", async (req, res) => {
-    try {
-        const { id } = req.params;
-        const conn = await (await import("../config/db.js")).default.getConnection();
-        try {
-            const [rows] = await conn.query("SELECT * FROM concerns WHERE id = ?", [id]);
-            if (!rows.length) {
-                return res.status(404).json({ message: "Concern not found." });
-            }
-            const concern = rows[0];
-            const [files] = await conn.query(
-                "SELECT id, original_name, stored_name, mime_type, size, created_at FROM concern_attachments WHERE concern_id = ? ORDER BY id DESC",
-                [id]
-            );
-            const baseUrl = `${req.protocol}://${req.get("host")}`;
-            const response = {
-                id: concern.id,
-                title: concern.title,
-                description: concern.description,
-                category: concern.category,
-                status: concern.status,
-                createdAt: concern.created_at,
-                updatedAt: concern.updated_at,
-                files: files.map((f) => ({
-                    id: f.id,
-                    name: f.original_name,
-                    url: `${baseUrl}/uploads/${f.stored_name}`,
-                    mimeType: f.mime_type,
-                    size: f.size,
-                    createdAt: f.created_at,
-                })),
-            };
-            return res.json(response);
-        } finally {
-            conn.release();
-        }
-    } catch (e) {
-        console.error("concern details error:", e);
-        return res.status(500).json({ message: "Unable to fetch concern details." });
-    }
-});
-
 router.get("/report", authorize(["guidance_counselor"]), generateConcernReport);
+router.get("/flagged-students", authorize(["guidance_counselor"]), getFlaggedStudents);
+
+router
+    .route("/:id/report")
+    .get(getConcernReport)
+    .put(authorize(["guidance_counselor"]), saveConcernReport);
+
+router.post("/:id/notify-parent", authorize(["guidance_counselor"]), notifyParent);
 
 router
     .route("/:id")
@@ -77,4 +67,3 @@ router
     .delete(deleteConcern);
 
 export default router;
-
