@@ -1,7 +1,10 @@
 import { useState, useEffect, useRef } from 'react'
 import axios from 'axios'
+import { useToast } from '../../context/ToastContext'
+import Spinner from '../Spinner'
 
 const ConcernForm = ({ onSubmitted }) => {
+  const { showToast } = useToast()
   const [formData, setFormData] = useState({
     title: '',
     description: '',
@@ -86,10 +89,10 @@ const ConcernForm = ({ onSubmitted }) => {
         detail: { message: `Concern submitted: ${formData.title}` }
       }))
       onSubmitted?.()
-      alert('Concern submitted successfully!')
+      showToast('Concern submitted successfully!', 'success')
     } catch (error) {
       const errorMsg = error.response?.data?.message || 'Failed to submit concern. Please try again.'
-      alert(errorMsg)
+      showToast(errorMsg, 'error')
     } finally {
       setSubmitting(false)
     }
@@ -209,8 +212,9 @@ const ConcernForm = ({ onSubmitted }) => {
         <button
           type="submit"
           disabled={submitting}
-          className="px-6 py-3 bg-gradient-to-r from-primary-600 to-primary-700 text-white font-bold rounded-lg hover:shadow-lg transition disabled:opacity-50"
+          className="px-6 py-3 bg-gradient-to-r from-primary-600 to-primary-700 text-white font-bold rounded-lg hover:shadow-lg transition disabled:opacity-50 flex items-center gap-2"
         >
+          {submitting && <Spinner />}
           {submitting ? 'Submitting...' : 'Submit Concern'}
         </button>
       </form>

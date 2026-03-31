@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import axios from 'axios'
+import { useToast } from '../../context/ToastContext'
+import Spinner from '../Spinner'
 
 const STATUS_LABELS = {
   pending: 'Pending',
@@ -11,6 +13,7 @@ const STATUS_LABELS = {
 
 const CounselorReviewPanel = ({ concernId, onClose, onPrint }) => {
   const navigate = useNavigate()
+  const { showToast } = useToast()
   const [data, setData] = useState(null)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -38,7 +41,7 @@ const CounselorReviewPanel = ({ concernId, onClose, onPrint }) => {
       })
       .catch((err) => {
         console.error('Failed to load report data:', err)
-        alert('Failed to load concern details.')
+        showToast('Failed to load concern details.', 'error')
         onClose?.()
       })
       .finally(() => setLoading(false))
@@ -54,9 +57,9 @@ const CounselorReviewPanel = ({ concernId, onClose, onPrint }) => {
         closingRemarks,
         followUpRequired,
       })
-      alert('Report saved successfully!')
+      showToast('Report saved successfully!', 'success')
     } catch {
-      alert('Failed to save report. Please try again.')
+      showToast('Failed to save report. Please try again.', 'error')
     } finally {
       setSaving(false)
     }
@@ -84,9 +87,9 @@ const CounselorReviewPanel = ({ concernId, onClose, onPrint }) => {
     setNotifyingParent(true)
     try {
       const res = await axios.post(`/api/concerns/${concernId}/notify-parent`)
-      alert(res.data.message || 'Parent notification sent successfully!')
+      showToast(res.data.message || 'Parent notification sent successfully!', 'success')
     } catch (err) {
-      alert(err.response?.data?.message || 'Failed to send parent notification.')
+      showToast(err.response?.data?.message || 'Failed to send parent notification.', 'error')
     } finally {
       setNotifyingParent(false)
     }
@@ -117,8 +120,9 @@ const CounselorReviewPanel = ({ concernId, onClose, onPrint }) => {
             <button
               onClick={handleSave}
               disabled={saving}
-              className="px-4 py-2 bg-amber-500 text-white rounded-lg hover:bg-amber-600 transition font-semibold disabled:opacity-50"
+              className="px-4 py-2 bg-amber-500 text-white rounded-lg hover:bg-amber-600 transition font-semibold disabled:opacity-50 flex items-center gap-2"
             >
+              {saving && <Spinner />}
               {saving ? 'Saving...' : 'Save'}
             </button>
             <button
@@ -126,7 +130,9 @@ const CounselorReviewPanel = ({ concernId, onClose, onPrint }) => {
               disabled={notifyingParent}
               className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition font-semibold disabled:opacity-50 flex items-center gap-1"
             >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" /></svg>
+              {notifyingParent ? <Spinner /> : (
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" /></svg>
+              )}
               {notifyingParent ? 'Sending...' : (involvedStudents && involvedStudents.length > 0 ? 'Notify Parents' : 'Notify Parent')}
             </button>
             <button

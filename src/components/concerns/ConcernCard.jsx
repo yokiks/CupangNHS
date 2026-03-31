@@ -1,4 +1,5 @@
 import { useNavigate } from 'react-router-dom'
+import Spinner from '../Spinner'
 
 const STATUS_COLORS = {
   pending: 'bg-gray-100 text-gray-800',
@@ -16,7 +17,7 @@ const STATUS_LABELS = {
 
 const STATUS_FLOW = ['pending', 'read', 'in_review', 'resolved']
 
-const ConcernCard = ({ concern, isCounselor, onStatusUpdate, onDelete, onViewReport }) => {
+const ConcernCard = ({ concern, isCounselor, onStatusUpdate, onDelete, onViewReport, isUpdating, isDeleting }) => {
   const currentIndex = STATUS_FLOW.indexOf(concern.status)
   const navigate = useNavigate()
 
@@ -28,7 +29,7 @@ const ConcernCard = ({ concern, isCounselor, onStatusUpdate, onDelete, onViewRep
   return (
     <div
       className="border border-gray-200 rounded-lg p-4 hover:shadow-md transition cursor-pointer"
-      onClick={() => isCounselor && onViewReport?.(concern)}
+      onClick={() => onViewReport?.(concern)}
     >
       <div className="flex justify-between items-start mb-2">
         <div className="flex-1">
@@ -99,17 +100,21 @@ const ConcernCard = ({ concern, isCounselor, onStatusUpdate, onDelete, onViewRep
                 <button
                   key={status}
                   onClick={() => onStatusUpdate?.(concern.id, status)}
-                  className="px-3 py-1 text-xs bg-primary-100 text-primary-700 rounded hover:bg-primary-200 transition"
+                  disabled={isUpdating}
+                  className="px-3 py-1 text-xs bg-primary-100 text-primary-700 rounded hover:bg-primary-200 transition disabled:opacity-50 flex items-center gap-1"
                 >
+                  {isUpdating && <Spinner className="h-3 w-3" />}
                   Mark as {STATUS_LABELS[status]}
                 </button>
               )
             })}
             <button
               onClick={() => onDelete?.(concern.id)}
-              className="px-3 py-1 text-xs bg-red-100 text-red-700 rounded hover:bg-red-200 transition"
+              disabled={isDeleting}
+              className="px-3 py-1 text-xs bg-red-100 text-red-700 rounded hover:bg-red-200 transition disabled:opacity-50 flex items-center gap-1"
             >
-              Delete
+              {isDeleting && <Spinner className="h-3 w-3" />}
+              {isDeleting ? 'Deleting...' : 'Delete'}
             </button>
           </div>
         )}

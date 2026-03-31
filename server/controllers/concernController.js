@@ -120,6 +120,18 @@ export const createConcern = async (req, res) => {
             );
             const concern = buildConcernResponse(rows[0]);
 
+            const [counselors] = await conn.query(
+                `SELECT id FROM users WHERE role = 'guidance_counselor'`
+            );
+            const notifMsg = `New concern submitted: ${title}`;
+            for (const c of counselors) {
+                await conn.query(
+                    `INSERT INTO notifications (user_id, concern_id, message, type) VALUES (?, ?, ?, 'info')`,
+                    [c.id, result.insertId, notifMsg]
+                );
+                sendToUser(c.id, "notification:new", { message: notifMsg });
+            }
+
             broadcast("concern:new", concern);
 
             return res.status(201).json(concern);
@@ -261,6 +273,18 @@ export const updateConcernStatus = async (req, res) => {
                 `${concern.title} — ${statusMessages[status]}`
             );
 
+            const [involvedRows] = await conn.query(
+                `SELECT user_id FROM concern_involved_students WHERE concern_id = ?`,
+                [id]
+            );
+
+            for (const row of involvedRows) {
+                await conn.query(
+                    `INSERT INTO notifications (user_id, concern_id, message, type) VALUES (?, ?, ?, 'status_update')`,
+                    [row.user_id, id, `You are involved in: ${concern.title} — ${statusMessages[status]}`]
+                );
+            }
+
             const [updatedRows] = await conn.query("SELECT * FROM concerns WHERE id = ?", [id]);
             const updated = buildConcernResponse(updatedRows[0]);
 
@@ -270,6 +294,13 @@ export const updateConcernStatus = async (req, res) => {
             sendToUser(concern.user_id, "notification:new", {
                 message: `${concern.title} — ${statusMessages[status]}`,
             });
+
+            for (const row of involvedRows) {
+                sendToUser(row.user_id, "concern:statusUpdate", ssePayload);
+                sendToUser(row.user_id, "notification:new", {
+                    message: `You are involved in: ${concern.title} — ${statusMessages[status]}`,
+                });
+            }
 
             return res.json(updated);
         } finally {

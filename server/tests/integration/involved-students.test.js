@@ -120,6 +120,55 @@ describe("Involved students on concern creation", () => {
     });
 });
 
+describe("Involved students receive notifications on status update", () => {
+    let concernWithInvolved;
+
+    it("should create a concern with involved students for notification test", async () => {
+        const res = await request
+            .post("/api/concerns")
+            .set("Authorization", `Bearer ${reporter.token}`)
+            .field("title", "Notif Test Concern")
+            .field("description", "Testing notifications for involved students")
+            .field("category", "safety")
+            .field("involvedStudentIds", JSON.stringify([involved1.user.id, involved2.user.id]));
+        expect(res.status).toBe(201);
+        concernWithInvolved = res.body;
+    });
+
+    it("should create notifications for involved students when status changes", async () => {
+        const res = await request
+            .patch(`/api/concerns/${concernWithInvolved.id}`)
+            .set("Authorization", `Bearer ${counselor.token}`)
+            .send({ status: "read" });
+        expect(res.status).toBe(200);
+
+        const [notifs1] = await pool.query(
+            "SELECT * FROM notifications WHERE user_id = ? AND concern_id = ? ORDER BY id DESC LIMIT 1",
+            [involved1.user.id, concernWithInvolved.id]
+        );
+        expect(notifs1.length).toBe(1);
+        expect(notifs1[0].message).toContain("You are involved in");
+        expect(notifs1[0].message).toContain("Notif Test Concern");
+
+        const [notifs2] = await pool.query(
+            "SELECT * FROM notifications WHERE user_id = ? AND concern_id = ? ORDER BY id DESC LIMIT 1",
+            [involved2.user.id, concernWithInvolved.id]
+        );
+        expect(notifs2.length).toBe(1);
+        expect(notifs2[0].message).toContain("You are involved in");
+    });
+
+    it("should also still create a notification for the reporting student", async () => {
+        const [reporterNotifs] = await pool.query(
+            "SELECT * FROM notifications WHERE user_id = ? AND concern_id = ? ORDER BY id DESC LIMIT 1",
+            [reporter.user.id, concernWithInvolved.id]
+        );
+        expect(reporterNotifs.length).toBe(1);
+        expect(reporterNotifs[0].message).toContain("Notif Test Concern");
+        expect(reporterNotifs[0].message).not.toContain("You are involved in");
+    });
+});
+
 describe("Student search and profile", () => {
     it("should search students by name", async () => {
         const res = await request

@@ -1,19 +1,23 @@
 import { useState, useCallback } from 'react'
 import { useAuth } from '../context/AuthContext'
+import { useToast } from '../context/ToastContext'
 import Navbar from '../components/Navbar'
 import Footer from '../components/Footer'
 import PageBackground from '../components/PageBackground'
 import ConcernForm from '../components/concerns/ConcernForm'
 import ConcernList from '../components/concerns/ConcernList'
 import CounselorReviewPanel from '../components/concerns/CounselorReviewPanel'
+import StudentConcernDetail from '../components/concerns/StudentConcernDetail'
 import { openPrintableReport, openOverallReport } from '../components/concerns/ConcernReport'
 import axios from 'axios'
 
 const Dashboard = () => {
   const { user } = useAuth()
+  const { showToast } = useToast()
   const [showForm, setShowForm] = useState(false)
   const [refreshKey, setRefreshKey] = useState(0)
   const [reviewConcernId, setReviewConcernId] = useState(null)
+  const [generatingReport, setGeneratingReport] = useState(false)
 
   const isCounselor = user?.role === 'guidance_counselor'
 
@@ -27,13 +31,16 @@ const Dashboard = () => {
   }, [])
 
   const handleGenerateOverallReport = useCallback(async () => {
+    setGeneratingReport(true)
     try {
       const res = await axios.get('/api/concerns/report')
       openOverallReport(res.data)
     } catch {
-      alert('Failed to generate report. Please try again.')
+      showToast('Failed to generate report. Please try again.', 'error')
+    } finally {
+      setGeneratingReport(false)
     }
-  }, [])
+  }, [showToast])
 
   const handlePrintReport = useCallback((data) => {
     openPrintableReport(data, `${user?.firstName || ''} ${user?.lastName || ''}`)
@@ -74,16 +81,24 @@ const Dashboard = () => {
           isCounselor={isCounselor}
           onViewReport={handleViewReport}
           onGenerateOverallReport={handleGenerateOverallReport}
+          generatingReport={generatingReport}
           refreshKey={refreshKey}
         />
       </main>
 
       {reviewConcernId && (
-        <CounselorReviewPanel
-          concernId={reviewConcernId}
-          onClose={() => setReviewConcernId(null)}
-          onPrint={handlePrintReport}
-        />
+        isCounselor ? (
+          <CounselorReviewPanel
+            concernId={reviewConcernId}
+            onClose={() => setReviewConcernId(null)}
+            onPrint={handlePrintReport}
+          />
+        ) : (
+          <StudentConcernDetail
+            concernId={reviewConcernId}
+            onClose={() => setReviewConcernId(null)}
+          />
+        )
       )}
 
       <Footer />

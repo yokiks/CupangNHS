@@ -1,16 +1,21 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import axios from 'axios'
+import { useToast } from '../../context/ToastContext'
+import Spinner from '../Spinner'
 import ConcernFilters from './ConcernFilters'
 import ConcernCard from './ConcernCard'
 
-const ConcernList = ({ isCounselor, onViewReport, onGenerateOverallReport, refreshKey }) => {
+const ConcernList = ({ isCounselor, onViewReport, onGenerateOverallReport, generatingReport, refreshKey }) => {
   const navigate = useNavigate()
+  const { showToast } = useToast()
   const [concerns, setConcerns] = useState([])
   const [filteredConcerns, setFilteredConcerns] = useState([])
   const [loading, setLoading] = useState(true)
   const [flaggedStudents, setFlaggedStudents] = useState([])
   const [showFlagged, setShowFlagged] = useState(false)
+  const [updatingId, setUpdatingId] = useState(null)
+  const [deletingId, setDeletingId] = useState(null)
   const eventSourceRef = useRef(null)
 
   const [statusFilter, setStatusFilter] = useState('all')
@@ -110,6 +115,7 @@ const ConcernList = ({ isCounselor, onViewReport, onGenerateOverallReport, refre
   }, [searchQuery, concerns, isCounselor])
 
   const handleStatusUpdate = async (concernId, newStatus) => {
+    setUpdatingId(concernId)
     try {
       setConcerns(prev => prev.map(c =>
         c.id === concernId ? { ...c, status: newStatus, updatedAt: new Date().toISOString() } : c
@@ -118,21 +124,26 @@ const ConcernList = ({ isCounselor, onViewReport, onGenerateOverallReport, refre
       fetchConcerns()
       window.dispatchEvent(new CustomEvent('notifications:refresh'))
     } catch {
-      alert('Failed to update status. Please try again.')
+      showToast('Failed to update status. Please try again.', 'error')
       fetchConcerns()
+    } finally {
+      setUpdatingId(null)
     }
   }
 
   const handleDelete = async (concernId) => {
     if (!window.confirm('Are you sure you want to delete this concern?')) return
+    setDeletingId(concernId)
     try {
       setConcerns(prev => prev.filter(c => c.id !== concernId))
       await axios.delete(`/api/concerns/${concernId}`)
       fetchConcerns()
-      alert('Concern deleted successfully!')
+      showToast('Concern deleted successfully!', 'success')
     } catch {
-      alert('Failed to delete concern. Please try again.')
+      showToast('Failed to delete concern. Please try again.', 'error')
       fetchConcerns()
+    } finally {
+      setDeletingId(null)
     }
   }
 
@@ -157,9 +168,11 @@ const ConcernList = ({ isCounselor, onViewReport, onGenerateOverallReport, refre
           {isCounselor && (
             <button
               onClick={onGenerateOverallReport}
-              className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition font-semibold text-sm"
+              disabled={generatingReport}
+              className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition font-semibold text-sm disabled:opacity-50 flex items-center gap-2"
             >
-              Generate Overall Report
+              {generatingReport && <Spinner />}
+              {generatingReport ? 'Generating...' : 'Generate Overall Report'}
             </button>
           )}
         </div>
@@ -217,6 +230,8 @@ const ConcernList = ({ isCounselor, onViewReport, onGenerateOverallReport, refre
               onStatusUpdate={handleStatusUpdate}
               onDelete={handleDelete}
               onViewReport={onViewReport}
+              isUpdating={updatingId === concern.id}
+              isDeleting={deletingId === concern.id}
             />
           ))}
         </div>
