@@ -1,9 +1,11 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
+import { useNavigate } from 'react-router-dom'
 import axios from 'axios'
 import ConcernFilters from './ConcernFilters'
 import ConcernCard from './ConcernCard'
 
 const ConcernList = ({ isCounselor, onViewReport, onGenerateOverallReport, refreshKey }) => {
+  const navigate = useNavigate()
   const [concerns, setConcerns] = useState([])
   const [filteredConcerns, setFilteredConcerns] = useState([])
   const [loading, setLoading] = useState(true)
@@ -172,10 +174,14 @@ const ConcernList = ({ isCounselor, onViewReport, onGenerateOverallReport, refre
                             s.concernCount >= 2 ? 'bg-amber-100 text-amber-800 border-amber-200' :
                             'bg-gray-100 text-gray-700 border-gray-200'
               return (
-                <div key={s.id} className={`flex items-center justify-between p-2 rounded-lg border text-sm ${color}`}>
+                <button
+                  key={s.id}
+                  onClick={() => navigate(`/dashboard/student/${s.id}`)}
+                  className={`flex items-center justify-between p-2 rounded-lg border text-sm ${color} hover:shadow-sm transition text-left`}
+                >
                   <span className="font-medium">{s.firstName} {s.lastName}</span>
                   <span className="font-bold ml-2">{s.concernCount} reports</span>
-                </div>
+                </button>
               )
             })}
           </div>

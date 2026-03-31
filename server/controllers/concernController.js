@@ -39,6 +39,17 @@ export const createConcern = async (req, res) => {
     try {
         const { title, description, category } = req.body;
 
+        let involvedStudentIds = [];
+        if (req.body.involvedStudentIds) {
+            try {
+                involvedStudentIds = typeof req.body.involvedStudentIds === "string"
+                    ? JSON.parse(req.body.involvedStudentIds)
+                    : req.body.involvedStudentIds;
+            } catch {
+                involvedStudentIds = [];
+            }
+        }
+
         if (!title || !description) {
             return res.status(400).json({ message: "Title and description are required." });
         }
@@ -63,12 +74,19 @@ export const createConcern = async (req, res) => {
                 [req.user.id, title, description, category || "general"]
             );
 
-            // Record initial status in history
             await conn.query(
                 `INSERT INTO concern_status_history (concern_id, changed_by, old_status, new_status)
                  VALUES (?, ?, NULL, 'pending')`,
                 [result.insertId, req.user.id]
             );
+
+            if (involvedStudentIds.length > 0) {
+                const values = involvedStudentIds.map((uid) => [result.insertId, uid]);
+                await conn.query(
+                    `INSERT IGNORE INTO concern_involved_students (concern_id, user_id) VALUES ?`,
+                    [values]
+                );
+            }
 
             const files = Array.isArray(req.files) ? req.files : [];
             if (files.length > 0) {
@@ -149,7 +167,33 @@ export const getConcerns = async (req, res) => {
             query += ` ORDER BY c.${column} ${order}`;
 
             const [rows] = await conn.query(query, params);
-            return res.json(rows.map(buildConcernResponse));
+            const concerns = rows.map(buildConcernResponse);
+
+            if (isCounselor && concerns.length > 0) {
+                const concernIds = concerns.map((c) => c.id);
+                const [involvedRows] = await conn.query(
+                    `SELECT cis.concern_id, u.id, u.first_name, u.last_name, u.lrn
+                     FROM concern_involved_students cis
+                     JOIN users u ON cis.user_id = u.id
+                     WHERE cis.concern_id IN (?)`,
+                    [concernIds]
+                );
+                const involvedMap = {};
+                for (const r of involvedRows) {
+                    if (!involvedMap[r.concern_id]) involvedMap[r.concern_id] = [];
+                    involvedMap[r.concern_id].push({
+                        id: r.id,
+                        firstName: r.first_name,
+                        lastName: r.last_name,
+                        lrn: r.lrn,
+                    });
+                }
+                for (const c of concerns) {
+                    c.involvedStudents = involvedMap[c.id] || [];
+                }
+            }
+
+            return res.json(concerns);
         } finally {
             conn.release();
         }
@@ -300,6 +344,32 @@ export const generateConcernReport = async (req, res) => {
             query += " ORDER BY c.created_at DESC";
 
             const [rows] = await conn.query(query, params);
+            const concerns = rows.map(buildConcernResponse);
+
+            if (concerns.length > 0) {
+                const concernIds = concerns.map((c) => c.id);
+                const [involvedRows] = await conn.query(
+                    `SELECT cis.concern_id, u.id, u.first_name, u.last_name, u.lrn
+                     FROM concern_involved_students cis
+                     JOIN users u ON cis.user_id = u.id
+                     WHERE cis.concern_id IN (?)`,
+                    [concernIds]
+                );
+                const involvedMap = {};
+                for (const r of involvedRows) {
+                    if (!involvedMap[r.concern_id]) involvedMap[r.concern_id] = [];
+                    involvedMap[r.concern_id].push({
+                        id: r.id,
+                        firstName: r.first_name,
+                        lastName: r.last_name,
+                        lrn: r.lrn,
+                    });
+                }
+                for (const c of concerns) {
+                    c.involvedStudents = involvedMap[c.id] || [];
+                }
+            }
+
             const summary = {
                 total: rows.length,
                 byStatus: STATUS_FLOW.reduce((acc, key) => {
@@ -315,7 +385,7 @@ export const generateConcernReport = async (req, res) => {
             return res.json({
                 generatedAt: new Date().toISOString(),
                 summary,
-                concerns: rows.map(buildConcernResponse),
+                concerns,
             });
         } finally {
             conn.release();
@@ -386,6 +456,7 @@ export const notifyParent = async (req, res) => {
             }
 
             const counselorName = `${req.user.firstName} ${req.user.lastName}`;
+
             await sendParentConcernNotificationEmail({
                 to: concern.parent_email,
                 parentName: concern.parent_name || "Parent/Guardian",
@@ -401,7 +472,54 @@ export const notifyParent = async (req, res) => {
                 [id, id, `Parent/guardian has been notified about: ${concern.title}`]
             );
 
-            return res.json({ message: "Parent notification email sent successfully." });
+            const notifiedParents = [{ studentName: `${concern.first_name} ${concern.last_name}`, email: concern.parent_email }];
+            const skippedInvolved = [];
+
+            const [involvedRows] = await conn.query(
+                `SELECT u.id, u.first_name, u.last_name, u.parent_email, u.parent_name
+                 FROM concern_involved_students cis
+                 JOIN users u ON cis.user_id = u.id
+                 WHERE cis.concern_id = ?`,
+                [id]
+            );
+
+            for (const inv of involvedRows) {
+                if (!inv.parent_email) {
+                    skippedInvolved.push(`${inv.first_name} ${inv.last_name}`);
+                    continue;
+                }
+                try {
+                    await sendParentConcernNotificationEmail({
+                        to: inv.parent_email,
+                        parentName: inv.parent_name || "Parent/Guardian",
+                        studentName: `${inv.first_name} ${inv.last_name}`,
+                        concernTitle: concern.title,
+                        concernCategory: concern.category,
+                        counselorName,
+                    });
+                    notifiedParents.push({ studentName: `${inv.first_name} ${inv.last_name}`, email: inv.parent_email });
+
+                    await conn.query(
+                        `INSERT INTO notifications (user_id, concern_id, message, type)
+                         VALUES (?, ?, ?, 'info')`,
+                        [inv.id, id, `Your parent/guardian has been notified about: ${concern.title}`]
+                    );
+                } catch (emailErr) {
+                    console.error(`Failed to notify parent of involved student ${inv.id}:`, emailErr);
+                    skippedInvolved.push(`${inv.first_name} ${inv.last_name}`);
+                }
+            }
+
+            let message = `Parent notification email sent to ${notifiedParents.length} parent(s).`;
+            if (skippedInvolved.length > 0) {
+                message += ` Skipped (no parent email): ${skippedInvolved.join(", ")}.`;
+            }
+
+            return res.json({
+                message,
+                notifiedCount: notifiedParents.length,
+                skippedStudents: skippedInvolved,
+            });
         } finally {
             conn.release();
         }

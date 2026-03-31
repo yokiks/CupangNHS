@@ -14,9 +14,12 @@ const request = supertest(app);
 let pool;
 let studentWithParent;
 let studentNoParent;
+let involvedWithParent;
+let involvedNoParent;
 let counselor;
 let concernWithParent;
 let concernNoParent;
+let concernWithInvolved;
 
 beforeAll(async () => {
     pool = getPool();
@@ -38,6 +41,22 @@ beforeAll(async () => {
 
     studentNoParent = await createTestStudent(pool);
 
+    const [r2] = await pool.query(
+        `INSERT INTO users (first_name, last_name, username, password_hash, role, lrn, email, parent_name, parent_email)
+         VALUES (?, ?, ?, ?, 'student', ?, ?, ?, ?)`,
+        ["Involved", "WithParent", `iwp_${Date.now()}`, pw, "301420000010", `iwp${Date.now()}@test.com`, "Involved Parent", "involvedparent@test.com"]
+    );
+    const [rows2] = await pool.query("SELECT * FROM users WHERE id = ?", [r2.insertId]);
+    involvedWithParent = { user: rows2[0], token: makeToken(rows2[0]) };
+
+    const [r3] = await pool.query(
+        `INSERT INTO users (first_name, last_name, username, password_hash, role, lrn, email)
+         VALUES (?, ?, ?, ?, 'student', ?, ?)`,
+        ["Involved", "NoParent", `inp_${Date.now()}`, pw, "301420000011", `inp${Date.now()}@test.com`]
+    );
+    const [rows3] = await pool.query("SELECT * FROM users WHERE id = ?", [r3.insertId]);
+    involvedNoParent = { user: rows3[0], token: makeToken(rows3[0]) };
+
     const res1 = await request
         .post("/api/concerns")
         .set("Authorization", `Bearer ${studentWithParent.token}`)
@@ -49,6 +68,15 @@ beforeAll(async () => {
         .set("Authorization", `Bearer ${studentNoParent.token}`)
         .send({ title: "No Parent Concern", description: "test", category: "general" });
     concernNoParent = res2.body.id;
+
+    const res3 = await request
+        .post("/api/concerns")
+        .set("Authorization", `Bearer ${studentWithParent.token}`)
+        .field("title", "Concern With Involved")
+        .field("description", "has involved students")
+        .field("category", "behavioral")
+        .field("involvedStudentIds", JSON.stringify([involvedWithParent.user.id, involvedNoParent.user.id]));
+    concernWithInvolved = res3.body.id;
 });
 
 afterAll(async () => {
@@ -85,9 +113,22 @@ describe("POST /api/concerns/:id/notify-parent", () => {
             .set("Authorization", `Bearer ${counselor.token}`);
         expect([200, 503]).toContain(res.status);
         if (res.status === 200) {
-            expect(res.body.message).toMatch(/sent successfully/i);
+            expect(res.body.message).toMatch(/parent/i);
+            expect(res.body.notifiedCount).toBeGreaterThanOrEqual(1);
         } else {
             expect(res.body.message).toMatch(/not configured/i);
+        }
+    });
+
+    it("should also notify parents of involved students when concern has them", async () => {
+        const res = await request
+            .post(`/api/concerns/${concernWithInvolved}/notify-parent`)
+            .set("Authorization", `Bearer ${counselor.token}`);
+        expect([200, 503]).toContain(res.status);
+        if (res.status === 200) {
+            expect(res.body.notifiedCount).toBeGreaterThanOrEqual(2);
+            expect(res.body.skippedStudents).toBeDefined();
+            expect(res.body.skippedStudents).toContain("Involved NoParent");
         }
     });
 });

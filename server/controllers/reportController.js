@@ -118,6 +118,14 @@ export const getConcernReport = async (req, res) => {
                 [id]
             );
 
+            const [involvedRows] = await conn.query(
+                `SELECT u.id, u.first_name, u.last_name, u.lrn
+                 FROM concern_involved_students cis
+                 JOIN users u ON cis.user_id = u.id
+                 WHERE cis.concern_id = ?`,
+                [id]
+            );
+
             const baseUrl = `${req.protocol}://${req.get("host")}`;
             const report = reportRows[0] || null;
 
@@ -152,6 +160,12 @@ export const getConcernReport = async (req, res) => {
                           updatedAt: report.updated_at,
                       }
                     : null,
+                involvedStudents: involvedRows.map((r) => ({
+                    id: r.id,
+                    firstName: r.first_name,
+                    lastName: r.last_name,
+                    lrn: r.lrn,
+                })),
                 statusHistory: historyRows.map((h) => ({
                     id: h.id,
                     oldStatus: h.old_status,

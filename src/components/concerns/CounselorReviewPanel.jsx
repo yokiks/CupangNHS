@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
 import axios from 'axios'
 
 const STATUS_LABELS = {
@@ -9,6 +10,7 @@ const STATUS_LABELS = {
 }
 
 const CounselorReviewPanel = ({ concernId, onClose, onPrint }) => {
+  const navigate = useNavigate()
   const [data, setData] = useState(null)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -74,7 +76,11 @@ const CounselorReviewPanel = ({ concernId, onClose, onPrint }) => {
   }
 
   const handleNotifyParent = async () => {
-    if (!window.confirm('Send an email notification to the parent/guardian about this concern?')) return
+    const hasInvolved = involvedStudents && involvedStudents.length > 0
+    const confirmMsg = hasInvolved
+      ? 'Send an email notification to the reporting student\'s parent and the parents of all involved students?'
+      : 'Send an email notification to the parent/guardian about this concern?'
+    if (!window.confirm(confirmMsg)) return
     setNotifyingParent(true)
     try {
       const res = await axios.post(`/api/concerns/${concernId}/notify-parent`)
@@ -99,7 +105,7 @@ const CounselorReviewPanel = ({ concernId, onClose, onPrint }) => {
 
   if (!data) return null
 
-  const { concern, student, statusHistory, files } = data
+  const { concern, student, statusHistory, files, involvedStudents } = data
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
@@ -121,7 +127,7 @@ const CounselorReviewPanel = ({ concernId, onClose, onPrint }) => {
               className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition font-semibold disabled:opacity-50 flex items-center gap-1"
             >
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" /></svg>
-              {notifyingParent ? 'Sending...' : 'Notify Parent'}
+              {notifyingParent ? 'Sending...' : (involvedStudents && involvedStudents.length > 0 ? 'Notify Parents' : 'Notify Parent')}
             </button>
             <button
               onClick={handlePrintReport}
@@ -145,7 +151,12 @@ const CounselorReviewPanel = ({ concernId, onClose, onPrint }) => {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
               <div className="flex gap-2 border-b border-gray-100 pb-2">
                 <span className="font-semibold text-primary-700 min-w-[140px]">Student Name:</span>
-                <span>{student.firstName} {student.lastName}</span>
+                <button
+                  onClick={() => { onClose?.(); navigate(`/dashboard/student/${student.id}`) }}
+                  className="text-primary-600 hover:underline font-medium"
+                >
+                  {student.firstName} {student.lastName}
+                </button>
               </div>
               <div className="flex gap-2 border-b border-gray-100 pb-2">
                 <span className="font-semibold text-primary-700 min-w-[140px]">Student ID/LRN:</span>
@@ -161,6 +172,26 @@ const CounselorReviewPanel = ({ concernId, onClose, onPrint }) => {
               </div>
             </div>
           </section>
+
+          {/* Section: Involved Students */}
+          {involvedStudents && involvedStudents.length > 0 && (
+            <section>
+              <h3 className="text-sm font-bold text-white bg-orange-600 px-3 py-2 mb-3">INVOLVED STUDENTS</h3>
+              <div className="flex flex-wrap gap-2">
+                {involvedStudents.map((s) => (
+                  <button
+                    key={s.id}
+                    onClick={() => { onClose?.(); navigate(`/dashboard/student/${s.id}`) }}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-orange-50 text-orange-800 border border-orange-200 rounded-full text-sm font-medium hover:bg-orange-100 transition"
+                  >
+                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" /></svg>
+                    {s.firstName} {s.lastName}
+                    {s.lrn && <span className="text-orange-500 text-xs">({s.lrn})</span>}
+                  </button>
+                ))}
+              </div>
+            </section>
+          )}
 
           {/* Section II: Concern Details */}
           <section>

@@ -12,7 +12,7 @@ const STATUS_LABELS = {
 export function openPrintableReport(data, counselorName) {
   if (!data) return
 
-  const { concern, student, report, statusHistory, files } = data
+  const { concern, student, report, statusHistory, files, involvedStudents } = data
 
   const reportHtml = `
     <html>
@@ -162,6 +162,16 @@ export function openPrintableReport(data, counselorName) {
             </div>
           </div>
         </div>
+
+        ${involvedStudents && involvedStudents.length > 0
+          ? `<div class="section">
+              <div class="section-title" style="background-color:#ea580c">INVOLVED STUDENTS</div>
+              <div style="display:flex;flex-wrap:wrap;gap:8px;margin:8px 0">
+                ${involvedStudents.map(s => `<span style="display:inline-block;padding:4px 12px;background:#fff7ed;border:1px solid #fed7aa;border-radius:999px;font-size:12px;color:#9a3412;font-weight:600">${s.firstName} ${s.lastName}${s.lrn ? ' (' + s.lrn + ')' : ''}</span>`).join('')}
+              </div>
+            </div>`
+          : ''
+        }
 
         <div class="section">
           <div class="section-title">II. CONCERN DETAILS</div>
@@ -320,12 +330,13 @@ export function openOverallReport(data) {
 
         <h2>All Concerns</h2>
         <table>
-          <tr><th>ID</th><th>Title</th><th>Student</th><th>Category</th><th>Status</th><th>Date</th></tr>
+          <tr><th>ID</th><th>Title</th><th>Reported By</th><th>Involved Students</th><th>Category</th><th>Status</th><th>Date</th></tr>
           ${data.concerns.map(c => `
             <tr>
               <td>${c.id}</td>
               <td>${c.title}</td>
               <td>${c.firstName} ${c.lastName}</td>
+              <td>${c.involvedStudents && c.involvedStudents.length > 0 ? c.involvedStudents.map(s => s.firstName + ' ' + s.lastName).join(', ') : '-'}</td>
               <td>${c.category}</td>
               <td>${c.status}</td>
               <td>${new Date(c.createdAt).toLocaleDateString()}</td>

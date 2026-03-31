@@ -75,6 +75,7 @@ export async function cleanTable(pool, table) {
 export async function cleanAllTables(pool) {
     await pool.query("SET FOREIGN_KEY_CHECKS = 0");
     const tables = [
+        "concern_involved_students",
         "concern_status_history",
         "concern_reports",
         "concern_attachments",

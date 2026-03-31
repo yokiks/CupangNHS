@@ -4,6 +4,7 @@ import cors from "cors";
 import authRoutes from "./routes/authRoutes.js";
 import concernRoutes from "./routes/concernRoutes.js";
 import notificationRoutes from "./routes/notificationRoutes.js";
+import studentRoutes from "./routes/studentRoutes.js";
 import path from "path";
 import { fileURLToPath } from "url";
 
@@ -30,6 +31,7 @@ app.get("/api/health", (req, res) => {
 app.use("/api/auth", authRoutes);
 app.use("/api/concerns", concernRoutes);
 app.use("/api/notifications", notificationRoutes);
+app.use("/api/students", studentRoutes);
 
 app.use((err, req, res, next) => {
     console.error(err);

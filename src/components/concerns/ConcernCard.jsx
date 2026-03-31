@@ -1,3 +1,5 @@
+import { useNavigate } from 'react-router-dom'
+
 const STATUS_COLORS = {
   pending: 'bg-gray-100 text-gray-800',
   read: 'bg-blue-100 text-blue-800',
@@ -16,6 +18,12 @@ const STATUS_FLOW = ['pending', 'read', 'in_review', 'resolved']
 
 const ConcernCard = ({ concern, isCounselor, onStatusUpdate, onDelete, onViewReport }) => {
   const currentIndex = STATUS_FLOW.indexOf(concern.status)
+  const navigate = useNavigate()
+
+  const goToProfile = (e, studentId) => {
+    e.stopPropagation()
+    navigate(`/dashboard/student/${studentId}`)
+  }
 
   return (
     <div
@@ -26,9 +34,15 @@ const ConcernCard = ({ concern, isCounselor, onStatusUpdate, onDelete, onViewRep
         <div className="flex-1">
           <h3 className="text-xl font-semibold text-gray-800 mb-1">{concern.title}</h3>
           {isCounselor && (
-            <p className="text-sm text-gray-600 flex items-center gap-2">
+            <p className="text-sm text-gray-600 flex items-center gap-2 flex-wrap">
               <span>
-                Submitted by: {concern.firstName} {concern.lastName}
+                Submitted by:{' '}
+                <button
+                  onClick={(e) => goToProfile(e, concern.userId)}
+                  className="text-primary-600 hover:underline font-medium"
+                >
+                  {concern.firstName} {concern.lastName}
+                </button>
                 {concern.studentId && ` (LRN: ${concern.studentId})`}
               </span>
               {concern.concernCount != null && concern.concernCount >= 2 && (
@@ -42,6 +56,20 @@ const ConcernCard = ({ concern, isCounselor, onStatusUpdate, onDelete, onViewRep
                 </span>
               )}
             </p>
+          )}
+          {isCounselor && concern.involvedStudents && concern.involvedStudents.length > 0 && (
+            <div className="mt-1 flex items-center gap-1 flex-wrap text-xs">
+              <span className="text-gray-500 font-medium">Involved:</span>
+              {concern.involvedStudents.map(s => (
+                <button
+                  key={s.id}
+                  onClick={(e) => goToProfile(e, s.id)}
+                  className="px-2 py-0.5 bg-orange-50 text-orange-700 border border-orange-200 rounded-full hover:bg-orange-100 transition"
+                >
+                  {s.firstName} {s.lastName}
+                </button>
+              ))}
+            </div>
           )}
         </div>
         <span className={`px-3 py-1 rounded-full text-xs font-semibold ${STATUS_COLORS[concern.status] || STATUS_COLORS.pending}`}>
