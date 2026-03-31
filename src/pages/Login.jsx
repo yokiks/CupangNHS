@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import Navbar from '../components/Navbar';
@@ -16,24 +16,9 @@ const Login = () => {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
-  const [rememberMe, setRememberMe] = useState(false);
 
   const { login } = useAuth();
   const navigate = useNavigate();
-
-  // Load saved credentials if remember me was checked
-  useEffect(() => {
-    const savedIdentifier = localStorage.getItem('rememberedIdentifier');
-    const savedRole = localStorage.getItem('rememberedRole');
-    if (savedIdentifier) {
-      setFormData(prev => ({
-        ...prev,
-        identifier: savedIdentifier,
-        role: savedRole || 'student'
-      }));
-      setRememberMe(true);
-    }
-  }, []);
 
   const handleChange = (e) => {
     setFormData({
@@ -58,14 +43,6 @@ const Login = () => {
     const result = await login(formData.identifier, formData.password);
 
     if (result.success) {
-      // Handle remember me
-      if (rememberMe) {
-        localStorage.setItem('rememberedIdentifier', formData.identifier);
-        localStorage.setItem('rememberedRole', formData.role);
-      } else {
-        localStorage.removeItem('rememberedIdentifier');
-        localStorage.removeItem('rememberedRole');
-      }
       navigate('/dashboard');
     } else {
       setError(result.message || 'Login failed. Please check your credentials.');
@@ -180,19 +157,7 @@ const Login = () => {
                 </div>
                 
                 {/* Forgot Password */}
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center">
-                    <input
-                      id="remember-me"
-                      type="checkbox"
-                      checked={rememberMe}
-                      onChange={(e) => setRememberMe(e.target.checked)}
-                      className="h-4 w-4 text-primary-600 border-gray-300 rounded cursor-pointer focus:ring-primary-500"
-                    />
-                    <label htmlFor="remember-me" className="ml-2 text-sm text-gray-700 cursor-pointer">
-                      Remember me
-                    </label>
-                  </div>
+                <div className="flex items-center justify-end">
                   <Link to="/forgot-password" className="text-sm text-primary-600 font-semibold">
                     Forgot Password?
                   </Link>

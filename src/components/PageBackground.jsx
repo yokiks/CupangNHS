@@ -1,4 +1,8 @@
+import { useAuth } from '../context/AuthContext'
+import NotificationFab from './NotificationFab'
+
 const PageBackground = ({ children }) => {
+  const { user } = useAuth()
   return (
     <div className="min-h-screen flex flex-col relative overflow-hidden">
       {/* Background Image with Overlay - Optimized for performance and mobile */}
@@ -24,6 +28,7 @@ const PageBackground = ({ children }) => {
       
       <div className="relative z-10 flex flex-col min-h-screen">
         {children}
+        {user && <NotificationFab />}
       </div>
     </div>
   )

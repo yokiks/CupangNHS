@@ -1,7 +1,6 @@
 import { useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import NotificationBell from './NotificationBell';
 
 const Navbar = () => {
   const location = useLocation();
@@ -47,12 +46,6 @@ const Navbar = () => {
           
           {/* Right Side - Notification & Hamburger */}
           <div className="flex items-center gap-3">
-            {user && (
-              <div className="hidden md:block">
-                <NotificationBell />
-              </div>
-            )}
-            
             {/* Hamburger Button (Mobile Only) */}
             <button
               onClick={toggleMenu}
@@ -253,9 +246,6 @@ const Navbar = () => {
                       </svg>
                       <span>Dashboard</span>
                     </Link>
-                  </li>
-                  <li className="px-4 py-2">
-                    <NotificationBell />
                   </li>
                   <li>
                     <button 

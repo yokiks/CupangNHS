@@ -140,7 +140,9 @@ const Home = () => {
 
                 {/* Email Card */}
                 <a 
-                  href="mailto:301420@deped.gov.ph"
+                  href="https://mail.google.com/mail/?view=cm&fs=1&to=301420@deped.gov.ph"
+                  target="_blank"
+                  rel="noopener noreferrer"
                   className="group relative bg-white rounded-2xl p-8 shadow-lg hover:shadow-2xl transition-all duration-300 transform hover:-translate-y-2 border-2 border-transparent hover:border-primary-300"
                 >
                   <div className="flex flex-col items-center text-center">
@@ -169,9 +171,10 @@ const Home = () => {
                 </a>
 
                 {/* Phone Card */}
-                <a 
-                  href="tel:09#######13"
+                <div 
                   className="group relative bg-white rounded-2xl p-8 shadow-lg hover:shadow-2xl transition-all duration-300 transform hover:-translate-y-2 border-2 border-transparent hover:border-primary-300"
+                  aria-disabled="true"
+                  role="img"
                 >
                   <div className="flex flex-col items-center text-center">
                     <div className="relative mb-6">
@@ -195,7 +198,7 @@ const Home = () => {
                       Give us a call
                     </div>
                   </div>
-                </a>
+                </div>
               </div>
 
               {/* Office Hours Section */}

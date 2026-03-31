@@ -1,4 +1,7 @@
 import pool from "../config/db.js";
+import fs from "fs";
+import path from "path";
+import { fileURLToPath } from "url";
 
 const STATUS_FLOW = ["pending", "read", "in_review", "resolved"];
 
@@ -34,6 +37,24 @@ export const createConcern = async (req, res) => {
 
         const conn = await pool.getConnection();
         try {
+            // Ensure attachments table exists (idempotent)
+            try {
+                await conn.query(`
+                    CREATE TABLE IF NOT EXISTS concern_attachments (
+                        id INT AUTO_INCREMENT PRIMARY KEY,
+                        concern_id INT NOT NULL,
+                        original_name VARCHAR(255) NOT NULL,
+                        stored_name VARCHAR(255) NOT NULL,
+                        mime_type VARCHAR(150) NOT NULL,
+                        size INT NOT NULL,
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        FOREIGN KEY (concern_id) REFERENCES concerns(id) ON DELETE CASCADE
+                    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+                `);
+            } catch (e) {
+                // ignore
+            }
+
             // Prevent duplicate pending concerns with same title for the same student
             const [existing] = await conn.query(
                 `SELECT id FROM concerns 
@@ -52,6 +73,31 @@ export const createConcern = async (req, res) => {
                  VALUES (?, ?, ?, ?, 'pending')`,
                 [req.user.id, title, description, category || "general"]
             );
+
+            // Save attachments if provided
+            const files = Array.isArray(req.files) ? req.files : [];
+            if (files.length > 0) {
+                const __filename = fileURLToPath(import.meta.url);
+                const __dirname = path.dirname(__filename);
+                const uploadDir = path.join(__dirname, "..", "uploads");
+                if (!fs.existsSync(uploadDir)) {
+                    fs.mkdirSync(uploadDir, { recursive: true });
+                }
+
+                for (const f of files) {
+                    const ext = f.originalname.includes(".") ? `.${f.originalname.split(".").pop()}` : "";
+                    const stored = `concern_${result.insertId}_${Date.now()}_${Math.random()
+                        .toString(36)
+                        .slice(2)}${ext}`;
+                    const filePath = path.join(uploadDir, stored);
+                    fs.writeFileSync(filePath, f.buffer);
+                    await conn.query(
+                        `INSERT INTO concern_attachments (concern_id, original_name, stored_name, mime_type, size)
+                         VALUES (?, ?, ?, ?, ?)`,
+                        [result.insertId, f.originalname, stored, f.mimetype, f.size]
+                    );
+                }
+            }
 
             const [rows] = await conn.query("SELECT * FROM concerns WHERE id = ?", [result.insertId]);
             return res.status(201).json(buildConcernResponse(rows[0]));

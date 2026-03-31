@@ -73,7 +73,7 @@ const Register = () => {
     let userData = {
       username: formData.username.trim(),
       password: formData.password,
-      role: formData.role,
+      role: 'student',
     };
 
     // Student validation + data
@@ -104,20 +104,7 @@ const Register = () => {
       };
     }
 
-    // Guidance validation + data
-    if (formData.role === 'guidance') {
-      if (!formData.guidanceEmail || !formData.guidanceId) {
-        setError('Please complete guidance counselor fields');
-        setLoading(false);
-        return;
-      }
-
-      userData = {
-        ...userData,
-        guidanceEmail: formData.guidanceEmail.trim(),
-        guidanceId: formData.guidanceId.trim(),
-      };
-    }
+    // Guidance counselor self-registration is disabled
 
     const result = await register(userData);
 
@@ -163,20 +150,7 @@ const Register = () => {
 
               <form onSubmit={handleSubmit} className="space-y-8">
 
-                {/* Role Selection */}
-                <div className="bg-white rounded-2xl p-6 shadow-md border-2 border-primary-100">
-                  <h3 className="text-xl font-bold text-primary-700 mb-3">Register As</h3>
-
-                  <select
-                    name="role"
-                    value={formData.role}
-                    onChange={handleChange}
-                    className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-primary-500 focus:border-primary-500"
-                  >
-                    <option value="student">Student</option>
-                    <option value="guidance">Guidance Counselor</option>
-                  </select>
-                </div>
+                {/* Role Selection removed: only students can self-register */}
 
                 {/* STUDENT FORM */}
                 {formData.role === 'student' && (
@@ -303,39 +277,7 @@ const Register = () => {
                   </>
                 )}
 
-                {/* GUIDANCE COUNSELOR FORM */}
-                {formData.role === 'guidance' && (
-                  <div className="bg-white rounded-2xl p-6 shadow-md border-2 border-primary-100">
-                    <h3 className="text-xl font-bold text-primary-700 mb-4">Guidance Counselor Details</h3>
-
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-
-                      <div>
-                        <label className="block font-semibold mb-1">Email *</label>
-                        <input
-                          type="email"
-                          name="guidanceEmail"
-                          value={formData.guidanceEmail}
-                          onChange={handleChange}
-                          className="w-full px-4 py-3 border-2 rounded-xl"
-                          placeholder="example@email.com"
-                        />
-                      </div>
-
-                      <div>
-                        <label className="block font-semibold mb-1">Counselor ID *</label>
-                        <input
-                          type="text"
-                          name="guidanceId"
-                          value={formData.guidanceId}
-                          onChange={handleChange}
-                          className="w-full px-4 py-3 border-2 rounded-xl"
-                          placeholder="Enter your counselor ID"
-                        />
-                      </div>
-                    </div>
-                  </div>
-                )}
+                {/* Guidance Counselor form removed: counselors will receive provisioned accounts */}
 
                 {/* Username + Password */}
                 <div className="bg-white rounded-2xl p-6 shadow-md border-2 border-primary-100">

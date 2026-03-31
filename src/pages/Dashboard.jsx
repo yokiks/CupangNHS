@@ -99,9 +99,25 @@ const Dashboard = () => {
         })
       }
       
+      // Optimistically add the new concern locally (best-effort)
+      const optimistic = {
+        id: Math.random().toString(36).slice(2),
+        title: formData.title,
+        description: formData.description,
+        category: formData.category,
+        status: 'pending',
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      }
+      setConcerns(prev => [optimistic, ...prev])
+      setFilteredConcerns(prev => [optimistic, ...prev])
+
       setFormData({ title: '', description: '', category: 'academic', files: [] })
       setShowForm(false)
+      // Refresh from server in background to replace optimistic row
       fetchConcerns()
+      // Notify locally via the notifications bell
+      window.dispatchEvent(new CustomEvent('notifications:push', { detail: { message: `Concern submitted: ${optimistic.title}` } }))
       alert('Concern submitted successfully!')
     } catch (error) {
       console.error('Error submitting concern:', error)
@@ -113,10 +129,25 @@ const Dashboard = () => {
 
   const handleStatusUpdate = async (concernId, newStatus) => {
     try {
+      // Optimistic update
+      setConcerns(prev => prev.map(c => c.id === concernId ? { ...c, status: newStatus, updatedAt: new Date().toISOString() } : c))
+      setFilteredConcerns(prev => prev.map(c => c.id === concernId ? { ...c, status: newStatus, updatedAt: new Date().toISOString() } : c))
+
       await axios.patch(`/api/concerns/${concernId}`, { status: newStatus })
+
+      // Light background refresh
       fetchConcerns()
+      // Trigger notifications panel to refresh quickly
+      window.dispatchEvent(new CustomEvent('notifications:refresh'))
+      // Local push so it shows instantly
+      const updated = concerns.find(c => c.id === concernId)
+      const title = updated?.title || 'Concern'
+      const label = getStatusLabel(newStatus)
+      window.dispatchEvent(new CustomEvent('notifications:push', { detail: { message: `${title} — marked as ${label}` } }))
     } catch (error) {
       alert('Failed to update status. Please try again.')
+      // Rollback by refetching authoritative data
+      fetchConcerns()
     }
   }
 
@@ -124,11 +155,19 @@ const Dashboard = () => {
     if (!window.confirm('Are you sure you want to delete this concern?')) return
     
     try {
+      // Optimistic remove
+      setConcerns(prev => prev.filter(c => c.id !== concernId))
+      setFilteredConcerns(prev => prev.filter(c => c.id !== concernId))
+
       await axios.delete(`/api/concerns/${concernId}`)
+      // Background refresh to confirm
       fetchConcerns()
+      window.dispatchEvent(new CustomEvent('notifications:push', { detail: { message: 'Concern deleted' } }))
       alert('Concern deleted successfully!')
     } catch (error) {
       alert('Failed to delete concern. Please try again.')
+      // Rollback
+      fetchConcerns()
     }
   }
 

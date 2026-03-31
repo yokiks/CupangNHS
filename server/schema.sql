@@ -92,7 +92,6 @@ CREATE TABLE IF NOT EXISTS password_resets (
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 );
 
-
 -- -- ==========================================
 -- --  GUIDANCE CONCERN MANAGEMENT SYSTEM SCHEMA
 -- --  With File Attachments Support (2025)
@@ -230,3 +229,4 @@ CREATE TABLE IF NOT EXISTS password_resets (
 -- INSERT INTO users (first_name, last_name, username, password_hash, role)
 -- VALUES ('System', 'Admin', 'admin', '$2y$10$abcdefghijklmnopqrstuv', 'admin')
 -- ON DUPLICATE KEY UPDATE username = username;
+

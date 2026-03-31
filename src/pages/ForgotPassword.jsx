@@ -5,35 +5,62 @@ import Navbar from '../components/Navbar';
 import Footer from '../components/Footer';
 import PageBackground from '../components/PageBackground';
 
+const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+/** @returns {{ ok: true } | { ok: false; error: string }} */
+export function validateForgotPasswordEmail(email) {
+  const trimmed = (email || '').trim();
+  if (!trimmed) {
+    return { ok: false, error: 'Please enter your email address.' };
+  }
+  if (!EMAIL_PATTERN.test(trimmed)) {
+    return { ok: false, error: 'Please enter a valid email address.' };
+  }
+  return { ok: true };
+}
+
+/**
+ * POST /api/auth/forgot-password — backend sends Gmail with reset link when OAuth is configured.
+ * @returns {Promise<{ message: string; resetUrl?: string; token?: string }>}
+ */
+export async function requestPasswordReset(email) {
+  const trimmed = email.trim();
+  const res = await axios.post('/api/auth/forgot-password', { email: trimmed });
+  return {
+    message:
+      res.data?.message ||
+      'If an account exists with that email, a password reset link has been sent. Please check your email inbox and spam folder.',
+    resetUrl: res.data?.resetUrl,
+    token: res.data?.token,
+  };
+}
+
 const ForgotPassword = () => {
   const [email, setEmail] = useState('');
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [devResetLink, setDevResetLink] = useState('');
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
     setMessage('');
+    setDevResetLink('');
+
+    const validation = validateForgotPasswordEmail(email);
+    if (!validation.ok) {
+      setError(validation.error);
+      return;
+    }
+
     setLoading(true);
-
-    if (!email) {
-      setError('Please enter your email address.');
-      setLoading(false);
-      return;
-    }
-
-    // Basic email validation
-    const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailPattern.test(email)) {
-      setError('Please enter a valid email address.');
-      setLoading(false);
-      return;
-    }
-
     try {
-      const res = await axios.post('/api/auth/forgot-password', { email });
-      setMessage(res.data.message || 'If an account exists with that email, a password reset link has been sent. Please check your email inbox and spam folder.');
+      const result = await requestPasswordReset(email);
+      setMessage(result.message);
+      if (result.resetUrl) {
+        setDevResetLink(result.resetUrl);
+      }
     } catch (err) {
       setError(err.response?.data?.message || 'Failed to send reset link. Please try again.');
     } finally {
@@ -44,17 +71,14 @@ const ForgotPassword = () => {
   return (
     <PageBackground>
       <Navbar />
-      
+
       <main className="flex-grow flex items-center justify-center px-4 py-8 md:py-12">
         <div className="w-full max-w-lg">
-          {/* Main Card */}
           <div className="relative bg-gradient-to-br from-white via-primary-50 to-white rounded-3xl shadow-2xl overflow-hidden">
-            {/* Decorative Elements */}
             <div className="absolute top-0 right-0 w-64 h-64 bg-primary-200 rounded-full -mr-32 -mt-32 opacity-20"></div>
             <div className="absolute bottom-0 left-0 w-48 h-48 bg-primary-300 rounded-full -ml-24 -mb-24 opacity-20"></div>
-            
+
             <div className="relative p-8 md:p-10">
-              {/* Header Section */}
               <div className="text-center mb-8">
                 <div className="inline-flex items-center justify-center w-16 h-16 bg-gradient-to-br from-primary-600 to-primary-700 rounded-2xl shadow-xl mb-4 transform hover:rotate-12 transition-transform duration-300">
                   <svg className="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -66,7 +90,6 @@ const ForgotPassword = () => {
                 <p className="text-gray-600">No worries! Enter your email address and we'll send you reset instructions.</p>
               </div>
 
-              {/* Error Message */}
               {error && (
                 <div className="mb-6 p-4 bg-red-50 border-l-4 border-red-500 rounded-lg flex items-start space-x-3 animate-fade-in">
                   <svg className="w-5 h-5 text-red-500 flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
@@ -76,7 +99,6 @@ const ForgotPassword = () => {
                 </div>
               )}
 
-              {/* Success Message */}
               {message && (
                 <div className="mb-6 p-4 bg-green-50 border-l-4 border-green-500 rounded-lg flex items-start space-x-3 animate-fade-in">
                   <svg className="w-5 h-5 text-green-500 flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
@@ -89,9 +111,16 @@ const ForgotPassword = () => {
                 </div>
               )}
 
-              {/* Form */}
+              {devResetLink && (
+                <div className="mb-6 p-4 bg-amber-50 border border-amber-200 rounded-lg">
+                  <p className="text-xs font-semibold text-amber-900 mb-1">Development: open reset link</p>
+                  <a href={devResetLink} className="text-sm text-amber-800 break-all underline">
+                    {devResetLink}
+                  </a>
+                </div>
+              )}
+
               <form onSubmit={handleSubmit} className="space-y-5">
-                {/* Email Field */}
                 <div className="group">
                   <label htmlFor="email" className="block text-sm font-semibold text-gray-700 mb-2">
                     Email Address <span className="text-red-500">*</span>
@@ -121,7 +150,6 @@ const ForgotPassword = () => {
                   </p>
                 </div>
 
-                {/* Submit Button */}
                 <button
                   type="submit"
                   disabled={loading}
@@ -152,7 +180,6 @@ const ForgotPassword = () => {
                 </button>
               </form>
 
-              {/* Info Box */}
               <div className="mt-6 p-4 bg-blue-50 border-l-4 border-blue-400 rounded-lg">
                 <div className="flex items-start space-x-3">
                   <svg className="w-5 h-5 text-blue-500 flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
@@ -169,7 +196,6 @@ const ForgotPassword = () => {
                 </div>
               </div>
 
-              {/* Divider */}
               <div className="relative my-6">
                 <div className="absolute inset-0 flex items-center">
                   <div className="w-full border-t border-gray-200"></div>
@@ -179,15 +205,13 @@ const ForgotPassword = () => {
                 </div>
               </div>
 
-              {/* Back to Login Button */}
-              <Link 
+              <Link
                 to="/login"
                 className="block w-full py-3 text-center border-2 border-primary-600 text-primary-600 font-semibold rounded-xl hover:bg-primary-50 transform hover:-translate-y-0.5 transition-all duration-300"
               >
                 Back to Login
               </Link>
 
-              {/* Register Link */}
               <div className="mt-4 text-center">
                 <p className="text-sm text-gray-600">
                   Don't have an account?{' '}
@@ -197,24 +221,11 @@ const ForgotPassword = () => {
                 </p>
               </div>
 
-              {/* Additional Info */}
               <div className="mt-6 text-center">
-                <p className="text-xs text-gray-500">
-                  For security reasons, the reset link will expire in 1 hour
-                </p>
+                <p className="text-xs text-gray-500">For security reasons, the reset link will expire in 1 hour</p>
               </div>
             </div>
           </div>
-
-          {/* Help Section
-          <div className="mt-6 text-center">
-            <p className="text-sm text-gray-600">
-              Still having trouble?{' '}
-              <a href="#" className="text-primary-600 hover:text-primary-700 font-semibold">
-                Contact Support
-              </a>
-            </p>
-          </div> */}
         </div>
       </main>
 
@@ -224,341 +235,3 @@ const ForgotPassword = () => {
 };
 
 export default ForgotPassword;
-
-// import { useState } from 'react'
-// import { Link } from 'react-router-dom'
-// import axios from 'axios'
-// import Navbar from '../components/Navbar'
-// import Footer from '../components/Footer'
-// import PageBackground from '../components/PageBackground'
-
-// const ForgotPassword = () => {
-//   const [email, setEmail] = useState('')
-//   const [message, setMessage] = useState('')
-//   const [error, setError] = useState('')
-//   const [loading, setLoading] = useState(false)
-
-//   const handleSubmit = async (e) => {
-//     e.preventDefault()
-//     setError('')
-//     setMessage('')
-//     setLoading(true)
-
-//     if (!email) {
-//       setError('Please enter your email.')
-//       setLoading(false)
-//       return
-//     }
-
-//     try {
-//       const res = await axios.post('/api/auth/forgot-password', { email })
-//       setMessage(res.data.message || 'A reset link has been sent to your email.')
-//     } catch (err) {
-//       setError(err.response?.data?.message || 'Failed to send reset link. Please try again.')
-//     } finally {
-//       setLoading(false)
-//     }
-//   }
-
-//   return (
-//     <PageBackground>
-//       <Navbar />
-      
-//       <main className="flex-grow flex items-center justify-center px-4 py-12">
-//         <div className="w-full max-w-md bg-white rounded-2xl shadow-2xl p-8 md:p-10">
-          
-//           <h2 className="text-3xl font-bold text-primary-600 mb-2 text-center">
-//             Forgot Password
-//           </h2>
-
-//           <p className="text-gray-600 text-center mb-8">
-//             Enter your student email to receive a password reset link.
-//           </p>
-
-//           {error && (
-//             <div className="mb-4 p-3 bg-red-100 border border-red-400 text-red-700 rounded-lg text-sm">
-//               {error}
-//             </div>
-//           )}
-
-//           {message && (
-//             <div className="mb-4 p-3 bg-green-100 border border-green-400 text-green-700 rounded-lg text-sm">
-//               {message}
-//             </div>
-//           )}
-
-//           <form onSubmit={handleSubmit} className="space-y-6">
-//             <div>
-//               <label htmlFor="email" className="block text-sm font-semibold text-gray-700 mb-2">
-//                 Student Email
-//               </label>
-
-//               <input
-//                 type="email"
-//                 id="email"
-//                 name="email"
-//                 value={email}
-//                 onChange={(e) => setEmail(e.target.value)}
-//                 className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent transition"
-//                 placeholder="Enter your email"
-//                 required
-//               />
-//             </div>
-
-//             <button
-//               type="submit"
-//               disabled={loading}
-//               className="w-full py-3 bg-gradient-to-r from-primary-600 to-primary-700 text-white font-bold rounded-lg shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed"
-//             >
-//               {loading ? 'Sending...' : 'Send Reset Link'}
-//             </button>
-//           </form>
-
-//           <div className="mt-6 text-center space-y-2">
-//             <Link 
-//               to="/login" 
-//               className="block text-sm text-primary-600 hover:text-primary-700 font-semibold"
-//             >
-//               Back to Login
-//             </Link>
-
-//             <p className="text-sm text-gray-600">
-//               Don't have an account?{' '}
-//               <Link to="/register" className="text-primary-600 hover:text-primary-700 font-semibold">
-//                 Register here
-//               </Link>
-//             </p>
-//           </div>
-
-//         </div>
-//       </main>
-
-//       <Footer />
-//     </PageBackground>
-//   )
-// }
-
-// export default ForgotPassword
-
-// import { useState } from 'react'
-// import { Link } from 'react-router-dom'
-// import axios from 'axios'
-// import Navbar from '../components/Navbar'
-// import Footer from '../components/Footer'
-// import PageBackground from '../components/PageBackground'
-
-// const ForgotPassword = () => {
-//   const [identifier, setIdentifier] = useState('')
-//   const [message, setMessage] = useState('')
-//   const [error, setError] = useState('')
-//   const [loading, setLoading] = useState(false)
-
-//   const handleSubmit = async (e) => {
-//     e.preventDefault()
-//     setError('')
-//     setMessage('')
-//     setLoading(true)
-
-//     if (!identifier) {
-//       setError('Please enter your LRN or username')
-//       setLoading(false)
-//       return
-//     }
-
-//     try {
-//       const res = await axios.post('/api/auth/forgot-password', { identifier })
-//       setMessage(res.data.message || 'Password reset instructions have been generated.')
-//     } catch (err) {
-//       setError(err.response?.data?.message || 'Failed to generate reset instructions. Please try again.')
-//     } finally {
-//       setLoading(false)
-//     }
-//   }
-
-//   return (
-//     <PageBackground>
-//       <Navbar />
-      
-//       <main className="flex-grow flex items-center justify-center px-4 py-12">
-//         <div className="w-full max-w-md bg-white rounded-2xl shadow-2xl p-8 md:p-10">
-//           <h2 className="text-3xl font-bold text-primary-600 mb-2 text-center">Forgot Password</h2>
-//           <p className="text-gray-600 text-center mb-8">
-//             Enter your LRN or username and we’ll help you reset your password.
-//           </p>
-
-//           {error && (
-//             <div className="mb-4 p-3 bg-red-100 border border-red-400 text-red-700 rounded-lg text-sm">
-//               {error}
-//             </div>
-//           )}
-
-//           {message && (
-//             <div className="mb-4 p-3 bg-green-100 border border-green-400 text-green-700 rounded-lg text-sm">
-//               {message}
-//             </div>
-//           )}
-
-//           <form onSubmit={handleSubmit} className="space-y-6">
-//             <div>
-//               <label htmlFor="identifier" className="block text-sm font-semibold text-gray-700 mb-2">
-//                 LRN or Username
-//               </label>
-//               <input
-//                 type="text"
-//                 id="identifier"
-//                 name="identifier"
-//                 value={identifier}
-//                 onChange={(e) => setIdentifier(e.target.value)}
-//                 className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent transition"
-//                 placeholder="Enter your LRN or username"
-//                 required
-//               />
-//             </div>
-
-//             <button
-//               type="submit"
-//               disabled={loading}
-//               className="w-full py-3 bg-gradient-to-r from-primary-600 to-primary-700 text-white font-bold rounded-lg shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed"
-//             >
-//               {loading ? 'Sending...' : 'Send Reset Link'}
-//             </button>
-//           </form>
-
-//           <div className="mt-6 text-center space-y-2">
-//             <Link 
-//               to="/login" 
-//               className="block text-sm text-primary-600 hover:text-primary-700 font-semibold"
-//             >
-//               Back to Login
-//             </Link>
-//             <p className="text-sm text-gray-600">
-//               Don't have an account?{' '}
-//               <Link to="/register" className="text-primary-600 hover:text-primary-700 font-semibold">
-//                 Register here
-//               </Link>
-//             </p>
-//           </div>
-//         </div>
-//       </main>
-
-//       <Footer />
-//     </PageBackground>
-//   )
-// }
-
-// export default ForgotPassword
-
-// import { useState } from 'react'
-// import { Link } from 'react-router-dom'
-// import axios from 'axios'
-// import Navbar from '../components/Navbar'
-// import Footer from '../components/Footer'
-// import PageBackground from '../components/PageBackground'
-
-// const ForgotPassword = () => {
-//   const [email, setEmail] = useState('')
-//   const [message, setMessage] = useState('')
-//   const [error, setError] = useState('')
-//   const [loading, setLoading] = useState(false)
-
-//   const handleSubmit = async (e) => {
-//     e.preventDefault()
-//     setError('')
-//     setMessage('')
-//     setLoading(true)
-
-//     if (!email) {
-//       setError('Please enter your email.')
-//       setLoading(false)
-//       return
-//     }
-
-//     try {
-//       const res = await axios.post('/api/auth/forgot-password', { email })
-//       setMessage(res.data.message || 'A reset link has been sent to your email.')
-//     } catch (err) {
-//       setError(err.response?.data?.message || 'Failed to send reset link. Please try again.')
-//     } finally {
-//       setLoading(false)
-//     }
-//   }
-
-//   return (
-//     <PageBackground>
-//       <Navbar />
-      
-//       <main className="flex-grow flex items-center justify-center px-4 py-12">
-//         <div className="w-full max-w-md bg-white rounded-2xl shadow-2xl p-8 md:p-10">
-          
-//           <h2 className="text-3xl font-bold text-primary-600 mb-2 text-center">
-//             Forgot Password
-//           </h2>
-
-//           <p className="text-gray-600 text-center mb-8">
-//             Enter your student email to receive a password reset link.
-//           </p>
-
-//           {error && (
-//             <div className="mb-4 p-3 bg-red-100 border border-red-400 text-red-700 rounded-lg text-sm">
-//               {error}
-//             </div>
-//           )}
-
-//           {message && (
-//             <div className="mb-4 p-3 bg-green-100 border border-green-400 text-green-700 rounded-lg text-sm">
-//               {message}
-//             </div>
-//           )}
-
-//           <form onSubmit={handleSubmit} className="space-y-6">
-//             <div>
-//               <label htmlFor="email" className="block text-sm font-semibold text-gray-700 mb-2">
-//                 Student Email
-//               </label>
-
-//               <input
-//                 type="email"
-//                 id="email"
-//                 name="email"
-//                 value={email}
-//                 onChange={(e) => setEmail(e.target.value)}
-//                 className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent transition"
-//                 placeholder="Enter your email"
-//                 required
-//               />
-//             </div>
-
-//             <button
-//               type="submit"
-//               disabled={loading}
-//               className="w-full py-3 bg-gradient-to-r from-primary-600 to-primary-700 text-white font-bold rounded-lg shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed"
-//             >
-//               {loading ? 'Sending...' : 'Send Reset Link'}
-//             </button>
-//           </form>
-
-//           <div className="mt-6 text-center space-y-2">
-//             <Link 
-//               to="/login" 
-//               className="block text-sm text-primary-600 hover:text-primary-700 font-semibold"
-//             >
-//               Back to Login
-//             </Link>
-
-//             <p className="text-sm text-gray-600">
-//               Don't have an account?{' '}
-//               <Link to="/register" className="text-primary-600 hover:text-primary-700 font-semibold">
-//                 Register here
-//               </Link>
-//             </p>
-//           </div>
-
-//         </div>
-//       </main>
-
-//       <Footer />
-//     </PageBackground>
-//   )
-// }
-
-// export default ForgotPassword
