@@ -294,7 +294,7 @@ const About = () => {
                 </div>
                 <div>
                   <p className="font-semibold text-primary-700 mb-1">School ID</p>
-                  <p className="text-gray-700">301420</p>
+                  <p className="text-gray-700">109323</p>
                 </div>
               </div>
 

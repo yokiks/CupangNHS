@@ -2,8 +2,14 @@ import { Link } from 'react-router-dom';
 import Navbar from '../components/Navbar';
 import Footer from '../components/Footer';
 import PageBackground from '../components/PageBackground';
+import { useAuth } from '../context/AuthContext';
 
 const Concerns = () => {
+  const { user } = useAuth();
+  const isPendingRevalidation =
+    user?.role === 'student' && user?.accountStatus === 'pending_revalidation';
+  const portalPath = isPendingRevalidation ? '/revalidation' : '/dashboard';
+
   return (
     <PageBackground>
       <Navbar />
@@ -88,62 +94,94 @@ const Concerns = () => {
             <div className="relative p-10 md:p-16">
               <div className="text-center mb-12">
                 <h2 className="text-2xl md:text-3xl font-bold text-gray-800 mb-4">
-                  Get Started Today
+                  {user ? 'Welcome Back' : 'Get Started Today'}
                 </h2>
                 <p className="text-gray-600 text-lg">
-                  Access the portal to submit and track your concerns
+                  {user
+                    ? 'Continue to the portal to submit and track your concerns'
+                    : 'Access the portal to submit and track your concerns'}
                 </p>
               </div>
 
               {/* Action Buttons */}
-              <div className="grid md:grid-cols-2 gap-6 mb-8">
-                {/* Login Button */}
-                <Link 
-                  to="/login"
-                  className="group relative overflow-hidden"
-                >
-                  <div className="absolute inset-0 bg-gradient-to-r from-primary-600 to-primary-700 rounded-2xl transform group-hover:scale-105 transition-transform duration-300"></div>
-                  <div className="relative bg-gradient-to-r from-primary-600 to-primary-700 rounded-2xl shadow-xl hover:shadow-2xl transition-shadow duration-300 p-8">
-                    <div className="flex flex-col items-center text-center">
-                      <div className="w-14 h-14 bg-white bg-opacity-20 rounded-xl flex items-center justify-center mb-4 group-hover:bg-opacity-30 transition-all duration-300">
-                        <svg className="w-7 h-7 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 16l-4-4m0 0l4-4m-4 4h14m-5 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h7a3 3 0 013 3v1" />
-                        </svg>
+              {user ? (
+                <div className="mb-8">
+                  <Link
+                    to={portalPath}
+                    className="group relative block overflow-hidden"
+                  >
+                    <div className="absolute inset-0 bg-gradient-to-r from-primary-600 to-primary-700 rounded-2xl transform group-hover:scale-105 transition-transform duration-300"></div>
+                    <div className="relative bg-gradient-to-r from-primary-600 to-primary-700 rounded-2xl shadow-xl hover:shadow-2xl transition-shadow duration-300 p-8">
+                      <div className="flex flex-col items-center text-center">
+                        <div className="w-14 h-14 bg-white bg-opacity-20 rounded-xl flex items-center justify-center mb-4 group-hover:bg-opacity-30 transition-all duration-300">
+                          <svg className="w-7 h-7 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
+                          </svg>
+                        </div>
+                        <h3 className="text-xl font-bold text-white mb-2">
+                          {isPendingRevalidation ? 'Continue Revalidation' : 'Go to Dashboard'}
+                        </h3>
+                        <p className="text-primary-100 text-sm">
+                          {isPendingRevalidation
+                            ? 'Complete your account revalidation'
+                            : 'Open your student concerns workspace'}
+                        </p>
                       </div>
-                      <h3 className="text-xl font-bold text-white mb-2">Login</h3>
-                      <p className="text-primary-100 text-sm">
-                        Already have an account?
-                      </p>
                     </div>
-                  </div>
-                </Link>
+                  </Link>
+                </div>
+              ) : (
+                <div className="grid md:grid-cols-2 gap-6 mb-8">
+                  {/* Login Button */}
+                  <Link
+                    to="/login"
+                    className="group relative overflow-hidden"
+                  >
+                    <div className="absolute inset-0 bg-gradient-to-r from-primary-600 to-primary-700 rounded-2xl transform group-hover:scale-105 transition-transform duration-300"></div>
+                    <div className="relative bg-gradient-to-r from-primary-600 to-primary-700 rounded-2xl shadow-xl hover:shadow-2xl transition-shadow duration-300 p-8">
+                      <div className="flex flex-col items-center text-center">
+                        <div className="w-14 h-14 bg-white bg-opacity-20 rounded-xl flex items-center justify-center mb-4 group-hover:bg-opacity-30 transition-all duration-300">
+                          <svg className="w-7 h-7 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 16l-4-4m0 0l4-4m-4 4h14m-5 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h7a3 3 0 013 3v1" />
+                          </svg>
+                        </div>
+                        <h3 className="text-xl font-bold text-white mb-2">Login</h3>
+                        <p className="text-primary-100 text-sm">
+                          Already have an account?
+                        </p>
+                      </div>
+                    </div>
+                  </Link>
 
-                {/* Register Button */}
-                <Link 
-                  to="/register"
-                  className="group relative overflow-hidden"
-                >
-                  <div className="absolute inset-0 bg-gradient-to-r from-primary-700 to-primary-800 rounded-2xl transform group-hover:scale-105 transition-transform duration-300"></div>
-                  <div className="relative bg-gradient-to-r from-primary-700 to-primary-800 rounded-2xl shadow-xl hover:shadow-2xl transition-shadow duration-300 p-8">
-                    <div className="flex flex-col items-center text-center">
-                      <div className="w-14 h-14 bg-white bg-opacity-20 rounded-xl flex items-center justify-center mb-4 group-hover:bg-opacity-30 transition-all duration-300">
-                        <svg className="w-7 h-7 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z" />
-                        </svg>
+                  {/* Register Button */}
+                  <Link
+                    to="/register"
+                    className="group relative overflow-hidden"
+                  >
+                    <div className="absolute inset-0 bg-gradient-to-r from-primary-700 to-primary-800 rounded-2xl transform group-hover:scale-105 transition-transform duration-300"></div>
+                    <div className="relative bg-gradient-to-r from-primary-700 to-primary-800 rounded-2xl shadow-xl hover:shadow-2xl transition-shadow duration-300 p-8">
+                      <div className="flex flex-col items-center text-center">
+                        <div className="w-14 h-14 bg-white bg-opacity-20 rounded-xl flex items-center justify-center mb-4 group-hover:bg-opacity-30 transition-all duration-300">
+                          <svg className="w-7 h-7 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z" />
+                          </svg>
+                        </div>
+                        <h3 className="text-xl font-bold text-white mb-2">Register</h3>
+                        <p className="text-primary-100 text-sm">
+                          Create a new account
+                        </p>
                       </div>
-                      <h3 className="text-xl font-bold text-white mb-2">Register</h3>
-                      <p className="text-primary-100 text-sm">
-                        Create a new account
-                      </p>
                     </div>
-                  </div>
-                </Link>
-              </div>
+                  </Link>
+                </div>
+              )}
 
               {/* Help Text */}
               <div className="text-center">
                 <p className="text-gray-600 mb-6">
-                  Please log in or register to access the Student Concerns Portal
+                  {user
+                    ? 'You are signed in and ready to access the Student Concerns Portal'
+                    : 'Please log in or register to access the Student Concerns Portal'}
                 </p>
                 
                 {/* Additional Info */}

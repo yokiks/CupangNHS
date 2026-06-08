@@ -1,8 +1,9 @@
 const STATUS_LABELS = {
   pending: 'Pending',
   read: 'Read',
-  in_review: 'In Review',
+  in_review: 'In Progress',
   resolved: 'Resolved',
+  deleted: 'Deleted',
 }
 
 /**
@@ -314,7 +315,7 @@ export function openOverallReport(data) {
           <div class="stat-box"><strong>Total Concerns</strong><div class="number">${data.summary.total}</div></div>
           <div class="stat-box"><strong>Pending</strong><div class="number">${data.summary.byStatus.pending || 0}</div></div>
           <div class="stat-box"><strong>Read</strong><div class="number">${data.summary.byStatus.read || 0}</div></div>
-          <div class="stat-box"><strong>In Review</strong><div class="number">${data.summary.byStatus.in_review || 0}</div></div>
+          <div class="stat-box"><strong>In Progress</strong><div class="number">${data.summary.byStatus.in_review || 0}</div></div>
           <div class="stat-box"><strong>Resolved</strong><div class="number">${data.summary.byStatus.resolved || 0}</div></div>
         </div>
 

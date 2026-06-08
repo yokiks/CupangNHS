@@ -1,10 +1,20 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { useToast } from '../context/ToastContext';
 import Navbar from '../components/Navbar';
 import Footer from '../components/Footer';
 import PageBackground from '../components/PageBackground';
 import { Eye, EyeOff } from "lucide-react";
+
+const RegistrationNotice = () => (
+  <div className="rounded-2xl border border-yellow-200 bg-yellow-50 px-5 py-4 text-sm leading-6 text-yellow-900">
+    <p className="font-bold">Important Notice</p>
+    <p className="mt-1">
+      Please provide complete, accurate, and truthful information during registration. Submitted details will be used for account verification and school-related purposes. All personal information will be handled confidentially in accordance with the Data Privacy Act of 2012 (RA 10173).
+    </p>
+  </div>
+);
 
 const Register = () => {
   const [formData, setFormData] = useState({
@@ -19,6 +29,7 @@ const Register = () => {
     parentName: '',
     parentEmail: '',
     parentContact: '',
+    schoolIdProof: null,
 
     // Shared fields:
     username: '',
@@ -32,15 +43,27 @@ const Register = () => {
 
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [showRegistrationForm, setShowRegistrationForm] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const { register } = useAuth();
+  const { showToast } = useToast();
   const navigate = useNavigate();
 
   // Handle input change
   const handleChange = (e) => {
     const { name, value } = e.target;
-    setFormData({ ...formData, [name]: value });
+    const nextValue = name === 'parentContact'
+      ? value.replace(/\D/g, '').slice(0, 11)
+      : value;
+    setFormData({ ...formData, [name]: nextValue });
+    setError('');
+  };
+
+  // Handle file select
+  const handleFileChange = (e) => {
+    const file = e.target.files?.[0] || null;
+    setFormData({ ...formData, schoolIdProof: file });
     setError('');
   };
 
@@ -50,14 +73,12 @@ const Register = () => {
     setError('');
     setLoading(true);
 
-    // Basic validation
     if (!formData.username || !formData.password) {
       setError('Please fill in all required fields');
       setLoading(false);
       return;
     }
 
-    // Password match
     if (formData.password !== formData.confirmPassword) {
       setError('Passwords do not match');
       setLoading(false);
@@ -70,46 +91,60 @@ const Register = () => {
       return;
     }
 
-    let userData = {
-      username: formData.username.trim(),
-      password: formData.password,
-      role: 'student',
-    };
-
-    // Student validation + data
-    if (formData.role === 'student') {
-      if (!formData.firstName || !formData.lastName || !formData.lrn) {
-        setError('Please fill all student required fields');
-        setLoading(false);
-        return;
-      }
-
-      const lrnPattern = /^301420\d{6}$/;
-      if (!lrnPattern.test(formData.lrn.trim())) {
-        setError('LRN must be 12 digits and start with 301420');
-        setLoading(false);
-        return;
-      }
-
-      userData = {
-        ...userData,
-        firstName: formData.firstName.trim(),
-        lastName: formData.lastName.trim(),
-        lrn: formData.lrn.trim(),
-        studentEmail: formData.studentEmail.trim(),
-        gradeLevel: formData.gradeLevel.trim(),
-        parentName: formData.parentName.trim(),
-        parentEmail: formData.parentEmail.trim(),
-        parentContact: formData.parentContact.trim(),
-      };
+    if (!formData.firstName || !formData.lastName || !formData.lrn || !formData.studentEmail) {
+      setError('Please fill all student required fields');
+      setLoading(false);
+      return;
     }
 
-    // Guidance counselor self-registration is disabled
+    if (!formData.parentName || !formData.parentEmail || !formData.parentContact) {
+      setError('Please fill all parent/guardian required fields');
+      setLoading(false);
+      return;
+    }
 
-    const result = await register(userData);
+    const lrnPattern = /^109323\d{6}$/;
+    if (!lrnPattern.test(formData.lrn.trim())) {
+      setError('LRN must be 12 digits and start with 109323');
+      setLoading(false);
+      return;
+    }
 
-    if (result.success) navigate('/dashboard');
-    else setError(result.message || 'Registration failed');
+    const parentContactPattern = /^\d{11}$/;
+    if (!parentContactPattern.test(formData.parentContact.trim())) {
+      setError('Parent contact number must be exactly 11 digits');
+      setLoading(false);
+      return;
+    }
+
+    if (!formData.schoolIdProof) {
+      setError('Please upload proof of enrollment (School ID).');
+      setLoading(false);
+      return;
+    }
+
+    const formPayload = new FormData();
+    formPayload.append('role', 'student');
+    formPayload.append('firstName', formData.firstName.trim());
+    formPayload.append('lastName', formData.lastName.trim());
+    formPayload.append('username', formData.username.trim());
+    formPayload.append('password', formData.password);
+    formPayload.append('lrn', formData.lrn.trim());
+    formPayload.append('studentEmail', formData.studentEmail.trim());
+    formPayload.append('parentName', formData.parentName.trim());
+    formPayload.append('parentEmail', formData.parentEmail.trim());
+    formPayload.append('parentContact', formData.parentContact.trim());
+    formPayload.append('gradeLevel', formData.gradeLevel.trim());
+    formPayload.append('schoolIdProof', formData.schoolIdProof);
+
+    const result = await register(formPayload);
+
+    if (result.success) {
+      showToast(result.message || 'Registration submitted and pending approval.', 'success');
+      navigate('/login');
+    } else {
+      setError(result.message || 'Registration failed');
+    }
 
     setLoading(false);
   };
@@ -138,8 +173,29 @@ const Register = () => {
                 <p className="text-gray-600">Join us today! It's quick and easy.</p>
               </div>
 
+              <div className="mb-6">
+                <RegistrationNotice />
+              </div>
+
+              {!showRegistrationForm && (
+                <div className="space-y-4">
+                  <button
+                    type="button"
+                    onClick={() => setShowRegistrationForm(true)}
+                    className="w-full py-4 bg-primary-600 text-white font-bold rounded-xl shadow-md hover:bg-primary-700 transition"
+                  >
+                    Continue to Registration
+                  </button>
+                  <div className="text-center">
+                    <Link to="/login" className="text-primary-600 font-semibold">
+                      Already have an account? Login here
+                    </Link>
+                  </div>
+                </div>
+              )}
+
               {/* Error */}
-              {error && (
+              {showRegistrationForm && error && (
                 <div className="mb-6 p-4 bg-red-50 border-l-4 border-red-500 rounded-lg flex items-start space-x-3">
                   <svg className="w-5 h-5 text-red-500" fill="currentColor" viewBox="0 0 20 20">
                     <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
@@ -148,6 +204,7 @@ const Register = () => {
                 </div>
               )}
 
+              {showRegistrationForm && (
               <form onSubmit={handleSubmit} className="space-y-8">
 
                 {/* Role Selection removed: only students can self-register */}
@@ -196,7 +253,7 @@ const Register = () => {
                             value={formData.studentEmail}
                             onChange={handleChange}
                             className="w-full px-4 py-3 border-2 rounded-xl"
-                            placeholder="example@email.com"
+                            placeholder="example@gmail.com"
                           />
                         </div>
 
@@ -222,11 +279,11 @@ const Register = () => {
                             value={formData.lrn}
                             onChange={handleChange}
                             className="w-full px-4 py-3 border-2 rounded-xl"
-                            placeholder="301420XXXXXX"
+                            placeholder="109323XXXXXX"
                             maxLength={12}
-                            pattern="301420[0-9]{6}"
+                            pattern="109323[0-9]{6}"
                           />
-                          <p className="text-xs text-gray-500 mt-1">12-digit number starting with 301420</p>
+                          <p className="text-xs text-gray-500 mt-1">12-digit number starting with 109323</p>
                         </div>
                       </div>
                     </div>
@@ -257,7 +314,7 @@ const Register = () => {
                             value={formData.parentEmail}
                             onChange={handleChange}
                             className="w-full px-4 py-3 border-2 rounded-xl"
-                            placeholder="example@email.com"
+                            placeholder="example@gmail.com"
                           />
                         </div>
 
@@ -270,8 +327,29 @@ const Register = () => {
                             onChange={handleChange}
                             className="w-full px-4 py-3 border-2 rounded-xl"
                             placeholder="09XXXXXXXXX"
+                            inputMode="numeric"
+                            maxLength={11}
+                            pattern="[0-9]{11}"
                           />
+                          <p className="text-xs text-gray-500 mt-1">Enter exactly 11 digits</p>
                         </div>
+                      </div>
+                    </div>
+
+                    <div className="bg-white rounded-2xl p-6 shadow-md border-2 border-primary-100">
+                      <h3 className="text-xl font-bold text-primary-700 mb-4">Proof of Enrollment</h3>
+                      <div>
+                        <label className="block font-semibold mb-1">School ID *</label>
+                        <input
+                          type="file"
+                          accept="image/*,.pdf"
+                          onChange={handleFileChange}
+                          className="w-full px-4 py-3 border-2 rounded-xl"
+                        />
+                        {formData.schoolIdProof && (
+                          <p className="mt-2 text-sm text-gray-600">Selected file: {formData.schoolIdProof.name}</p>
+                        )}
+                        <p className="text-xs text-gray-500 mt-2">Upload a scanned or photographed copy of your school ID or enrollment proof.</p>
                       </div>
                     </div>
                   </>
@@ -363,13 +441,16 @@ const Register = () => {
                   {loading ? 'Creating Account...' : 'Create Account'}
                 </button>
               </form>
+              )}
 
               {/* Login Redirect */}
+              {showRegistrationForm && (
               <div className="text-center mt-6">
                 <Link to="/login" className="text-primary-600 font-semibold">
                   Already have an account? Login here
                 </Link>
               </div>
+              )}
 
             </div>
           </div>

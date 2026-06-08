@@ -5,6 +5,7 @@ import {
     getConcerns,
     updateConcernStatus,
     deleteConcern,
+    restoreConcern,
     generateConcernReport,
     getFlaggedStudents,
     notifyParent,
@@ -60,6 +61,7 @@ router
     .put(authorize(["guidance_counselor"]), saveConcernReport);
 
 router.post("/:id/notify-parent", authorize(["guidance_counselor"]), notifyParent);
+router.patch("/:id/restore", authorize(["guidance_counselor"]), restoreConcern);
 
 router
     .route("/:id")

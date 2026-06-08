@@ -46,11 +46,22 @@ export function makeToken(user) {
 
 export async function createTestStudent(pool) {
     const hash = await bcrypt.hash("Test1234!", 10);
-    const [result] = await pool.query(
-        `INSERT INTO users (first_name, last_name, username, password_hash, role, lrn, email)
-         VALUES (?, ?, ?, ?, 'student', ?, ?)`,
-        ["Test", "Student", `student_${Date.now()}`, hash, "301420000099", `student${Date.now()}@test.com`]
-    );
+    const unique = `${Date.now()}${Math.floor(Math.random() * 1000)}`;
+    const baseValues = ["Test", "Student", `student_${unique}`, hash, `301420${unique.slice(-6)}`, `student${unique}@test.com`];
+    let result;
+    try {
+        [result] = await pool.query(
+            `INSERT INTO users (first_name, last_name, username, password_hash, role, lrn, email, account_status)
+             VALUES (?, ?, ?, ?, 'student', ?, ?, 'active')`,
+            baseValues
+        );
+    } catch {
+        [result] = await pool.query(
+            `INSERT INTO users (first_name, last_name, username, password_hash, role, lrn, email)
+             VALUES (?, ?, ?, ?, 'student', ?, ?)`,
+            baseValues
+        );
+    }
     const [rows] = await pool.query("SELECT * FROM users WHERE id = ?", [result.insertId]);
     const user = rows[0];
     return { user, token: makeToken(user) };
@@ -75,6 +86,8 @@ export async function cleanTable(pool, table) {
 export async function cleanAllTables(pool) {
     await pool.query("SET FOREIGN_KEY_CHECKS = 0");
     const tables = [
+        "enrollment_validation_history",
+        "revalidation_requests",
         "concern_involved_students",
         "concern_status_history",
         "concern_reports",
@@ -82,6 +95,8 @@ export async function cleanAllTables(pool) {
         "notifications",
         "concerns",
         "password_resets",
+        "school_years",
+        "student_records",
         "users",
     ];
     for (const t of tables) {

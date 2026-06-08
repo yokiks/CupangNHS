@@ -63,7 +63,7 @@ export const AuthProvider = ({ children }) => {
       localStorage.setItem('token', token)
       axios.defaults.headers.common['Authorization'] = `Bearer ${token}`
       setUser(user)
-      return { success: true }
+      return { success: true, user }
     } catch (error) {
       return { 
         success: false, 
@@ -75,15 +75,17 @@ export const AuthProvider = ({ children }) => {
   const register = async (userData) => {
     try {
       const res = await axios.post('/api/auth/register', userData)
-      const { token, user } = res.data
-      localStorage.setItem('token', token)
-      axios.defaults.headers.common['Authorization'] = `Bearer ${token}`
-      setUser(user)
-      return { success: true }
+      const { token, user, message } = res.data
+      if (token) {
+        localStorage.setItem('token', token)
+        axios.defaults.headers.common['Authorization'] = `Bearer ${token}`
+        setUser(user)
+      }
+      return { success: true, message }
     } catch (error) {
-      return { 
-        success: false, 
-        message: error.response?.data?.message || 'Registration failed' 
+      return {
+        success: false,
+        message: error.response?.data?.message || 'Registration failed'
       }
     }
   }
@@ -98,11 +100,16 @@ export const AuthProvider = ({ children }) => {
     }
   }
 
+  const updateUser = (updates) => {
+    setUser((currentUser) => currentUser ? { ...currentUser, ...updates } : currentUser)
+  }
+
   const value = {
     user,
     login,
     register,
     logout,
+    updateUser,
     loading
   }
 

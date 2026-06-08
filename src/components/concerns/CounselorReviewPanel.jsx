@@ -7,8 +7,9 @@ import Spinner from '../Spinner'
 const STATUS_LABELS = {
   pending: 'Pending',
   read: 'Read',
-  in_review: 'In Review',
+  in_review: 'In Progress',
   resolved: 'Resolved',
+  deleted: 'Deleted',
 }
 
 const CounselorReviewPanel = ({ concernId, onClose, onPrint }) => {

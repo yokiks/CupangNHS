@@ -1,4 +1,8 @@
-import "dotenv/config";
+import "./config/env.js";
+import path from "path";
+import { fileURLToPath } from "url";
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 const connection = {
     host: process.env.DB_HOST || "localhost",
@@ -13,11 +17,11 @@ export default {
     client: "mysql2",
     connection,
     migrations: {
-        directory: "./migrations",
+        directory: path.join(__dirname, "migrations"),
         tableName: "knex_migrations",
     },
     seeds: {
-        directory: "./seeds",
+        directory: path.join(__dirname, "seeds"),
     },
     pool: {
         min: 0,

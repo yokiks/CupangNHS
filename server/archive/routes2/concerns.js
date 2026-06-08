@@ -150,7 +150,7 @@ router.patch('/:id', authenticateToken, async (req, res) => {
     const statusMessages = {
       'pending': 'Your concern has been received and is pending review.',
       'read': 'Your concern has been read by the guidance counselor.',
-      'in_review': 'Your concern is currently under review.',
+      'in_review': 'Your concern is currently in progress.',
       'resolved': 'Your concern has been resolved.'
     }
 

@@ -6,19 +6,22 @@ const STATUS_COLORS = {
   read: 'bg-blue-100 text-blue-800',
   in_review: 'bg-yellow-100 text-yellow-800',
   resolved: 'bg-green-100 text-green-800',
+  deleted: 'bg-red-100 text-red-800',
 }
 
 const STATUS_LABELS = {
   pending: 'Pending',
   read: 'Read',
-  in_review: 'In Review',
+  in_review: 'In Progress',
   resolved: 'Resolved',
+  deleted: 'Archived',
 }
 
-const STATUS_FLOW = ['pending', 'read', 'in_review', 'resolved']
+const STATUS_FLOW = ['read', 'in_review', 'resolved']
 
-const ConcernCard = ({ concern, isCounselor, onStatusUpdate, onDelete, onViewReport, isUpdating, isDeleting }) => {
+const ConcernCard = ({ concern, isCounselor, onStatusUpdate, onDelete, onRestore, onViewReport, isUpdating, isDeleting, isRestoring }) => {
   const currentIndex = STATUS_FLOW.indexOf(concern.status)
+  const isDeleted = concern.status === 'deleted'
   const navigate = useNavigate()
 
   const goToProfile = (e, studentId) => {
@@ -73,9 +76,11 @@ const ConcernCard = ({ concern, isCounselor, onStatusUpdate, onDelete, onViewRep
             </div>
           )}
         </div>
-        <span className={`px-3 py-1 rounded-full text-xs font-semibold ${STATUS_COLORS[concern.status] || STATUS_COLORS.pending}`}>
-          {STATUS_LABELS[concern.status] || concern.status}
-        </span>
+        {!isDeleted && (
+          <span className={`px-3 py-1 rounded-full text-xs font-semibold ${STATUS_COLORS[concern.status] || STATUS_COLORS.pending}`}>
+            {STATUS_LABELS[concern.status] || concern.status}
+          </span>
+        )}
       </div>
 
       <p className="text-gray-600 mb-3">{concern.description}</p>
@@ -88,34 +93,50 @@ const ConcernCard = ({ concern, isCounselor, onStatusUpdate, onDelete, onViewRep
 
         {isCounselor && (
           <div className="flex flex-wrap gap-2" onClick={(e) => e.stopPropagation()}>
-            <button
-              onClick={() => onViewReport?.(concern)}
-              className="px-3 py-1 text-xs bg-green-600 text-white rounded hover:bg-green-700 transition font-semibold"
-            >
-              View / Review
-            </button>
-            {STATUS_FLOW.map((status, index) => {
-              if (index <= currentIndex) return null
-              return (
+            {!isDeleted ? (
+              <>
                 <button
-                  key={status}
-                  onClick={() => onStatusUpdate?.(concern.id, status)}
-                  disabled={isUpdating}
-                  className="px-3 py-1 text-xs bg-primary-100 text-primary-700 rounded hover:bg-primary-200 transition disabled:opacity-50 flex items-center gap-1"
+                  onClick={() => onViewReport?.(concern)}
+                  className="px-3 py-1 text-xs bg-green-600 text-white rounded hover:bg-green-700 transition font-semibold"
                 >
-                  {isUpdating && <Spinner className="h-3 w-3" />}
-                  Mark as {STATUS_LABELS[status]}
+                  View / Review
                 </button>
-              )
-            })}
-            <button
-              onClick={() => onDelete?.(concern.id)}
-              disabled={isDeleting}
-              className="px-3 py-1 text-xs bg-red-100 text-red-700 rounded hover:bg-red-200 transition disabled:opacity-50 flex items-center gap-1"
-            >
-              {isDeleting && <Spinner className="h-3 w-3" />}
-              {isDeleting ? 'Deleting...' : 'Delete'}
-            </button>
+                {STATUS_FLOW.map((status, index) => {
+                  if (index <= currentIndex) return null
+                  return (
+                    <button
+                      key={status}
+                      onClick={() => onStatusUpdate?.(concern.id, status)}
+                      disabled={isUpdating}
+                      className="px-3 py-1 text-xs bg-primary-100 text-primary-700 rounded hover:bg-primary-200 transition disabled:opacity-50 flex items-center gap-1"
+                    >
+                      {isUpdating && <Spinner className="h-3 w-3" />}
+                      Mark as {status === 'in_review' ? 'In Progress' : STATUS_LABELS[status]}
+                    </button>
+                  )
+                })}
+                <button
+                  onClick={() => onDelete?.(concern.id)}
+                  disabled={isDeleting}
+                  className="px-3 py-1 text-xs bg-red-100 text-red-700 rounded hover:bg-red-200 transition disabled:opacity-50 flex items-center gap-1"
+                >
+                  {isDeleting && <Spinner className="h-3 w-3" />}
+                  {isDeleting ? 'Archiving...' : 'Archive'}
+                </button>
+              </>
+            ) : (
+              <>
+                <span className="px-3 py-1 text-xs bg-red-100 text-red-700 rounded-full font-semibold">Archived</span>
+                <button
+                  onClick={() => onRestore?.(concern.id)}
+                  disabled={isRestoring}
+                  className="px-3 py-1 text-xs bg-primary-600 text-white rounded hover:bg-primary-700 transition disabled:opacity-50 flex items-center gap-1"
+                >
+                  {isRestoring && <Spinner className="h-3 w-3" />}
+                  {isRestoring ? 'Restoring...' : 'Restore'}
+                </button>
+              </>
+            )}
           </div>
         )}
       </div>

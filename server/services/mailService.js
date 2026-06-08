@@ -67,12 +67,15 @@ async function fetchAccessToken(clientId, clientSecret, refreshToken, redirectUr
 
 export function isMailConfigured() {
     const user = readEnv("GMAIL_USER") || readEnv("GMAIL_FROM");
-    return Boolean(
+    const configured = Boolean(
         user &&
             readEnv("GMAIL_CLIENT_ID") &&
             readEnv("GMAIL_CLIENT_SECRET") &&
             readEnv("GMAIL_REFRESH_TOKEN")
     );
+
+    console.log("isMailConfigured called:", configured);
+    return configured;
 }
 
 /** Gmail OAuth2: all four env vars must be present. */

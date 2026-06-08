@@ -4,7 +4,7 @@ import axios from 'axios'
 const STATUS_LABELS = {
   pending: 'Pending',
   read: 'Read',
-  in_review: 'In Review',
+  in_review: 'In Progress',
   resolved: 'Resolved',
 }
 

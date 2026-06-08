@@ -79,9 +79,7 @@ const ConcernForm = ({ onSubmitted }) => {
 
       formData.files.forEach((file) => submitData.append('files', file))
 
-      await axios.post('/api/concerns', submitData, {
-        headers: { 'Content-Type': 'multipart/form-data' }
-      })
+      await axios.post('/api/concerns', submitData)
 
       setFormData({ title: '', description: '', category: 'academic', files: [] })
       setInvolvedStudents([])

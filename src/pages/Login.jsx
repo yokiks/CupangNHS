@@ -8,7 +8,6 @@ import { Eye, EyeOff } from "lucide-react";
 
 const Login = () => {
   const [formData, setFormData] = useState({
-    role: 'student',
     identifier: '',
     password: ''
   });
@@ -39,11 +38,11 @@ const Login = () => {
       return;
     }
 
-    // Call login (AuthContext login function only accepts identifier and password)
     const result = await login(formData.identifier, formData.password);
 
     if (result.success) {
-      navigate('/dashboard');
+      const destination = result.user?.role === 'guidance_counselor' ? '/admin' : '/dashboard';
+      navigate(destination);
     } else {
       setError(result.message || 'Login failed. Please check your credentials.');
     }
@@ -88,24 +87,10 @@ const Login = () => {
               {/* Login Form */}
               <form onSubmit={handleSubmit} className="space-y-5">
 
-                {/* Role Selection */}
-                <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-2">Login As</label>
-                  <select
-                    name="role"
-                    value={formData.role}
-                    onChange={handleChange}
-                    className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl bg-white focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-                  >
-                    <option value="student">Student</option>
-                    <option value="guidance">Guidance Counselor</option>
-                  </select>
-                </div>
-
-                {/* Identifier */}
+                  {/* Identifier */}
                 <div className="group">
                   <label htmlFor="identifier" className="block text-sm font-semibold text-gray-700 mb-2">
-                    {formData.role === "student" ? "LRN or Username" : "Username"}
+                    LRN or Username
                   </label>
                   <div className="relative">
                     <input
@@ -115,11 +100,7 @@ const Login = () => {
                       value={formData.identifier}
                       onChange={handleChange}
                       className="w-full pl-4 pr-4 py-3 border-2 border-gray-200 rounded-xl bg-white focus:ring-2 focus:ring-primary-500"
-                      placeholder={
-                        formData.role === "student"
-                          ? "Enter LRN or username"
-                          : "Enter your username"
-                      }
+                      placeholder="Enter LRN or username"
                       required
                     />
                   </div>

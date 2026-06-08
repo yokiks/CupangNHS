@@ -1,5 +1,10 @@
 import pool from "../config/db.js";
 
+const buildProofUrl = (req, storedName) => {
+    if (!storedName) return null;
+    return `${req.protocol}://${req.get("host")}/uploads/${storedName}`;
+};
+
 export const searchStudents = async (req, res) => {
     try {
         const { q } = req.query;
@@ -37,6 +42,69 @@ export const searchStudents = async (req, res) => {
     }
 };
 
+export const getStudentEnrollmentHistory = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const conn = await pool.getConnection();
+        try {
+            const [students] = await conn.query(
+                "SELECT id FROM users WHERE id = ? AND role = 'student' LIMIT 1",
+                [id]
+            );
+
+            if (!students.length) {
+                return res.status(404).json({ message: "Student not found." });
+            }
+
+            const [rows] = await conn.query(
+                `SELECT evh.id,
+                        evh.school_year_id,
+                        evh.school_year_label,
+                        evh.grade_level,
+                        evh.section,
+                        evh.school_id_proof_original_name,
+                        evh.school_id_proof_stored_name,
+                        evh.validated_at,
+                        approver.id AS approved_by_id,
+                        approver.first_name AS approved_by_first_name,
+                        approver.last_name AS approved_by_last_name
+                 FROM enrollment_validation_history evh
+                 JOIN users approver ON evh.approved_by_id = approver.id
+                 WHERE evh.student_id = ?
+                 ORDER BY evh.validated_at DESC, evh.id DESC`,
+                [id]
+            );
+
+            return res.json(
+                rows.map((row) => ({
+                    id: row.id,
+                    schoolYear: row.school_year_id
+                        ? {
+                            id: row.school_year_id,
+                            label: row.school_year_label,
+                        }
+                        : null,
+                    gradeLevel: row.grade_level,
+                    section: row.section,
+                    schoolIdProofName: row.school_id_proof_original_name,
+                    schoolIdProofUrl: buildProofUrl(req, row.school_id_proof_stored_name),
+                    validatedAt: row.validated_at,
+                    approvedBy: {
+                        id: row.approved_by_id,
+                        firstName: row.approved_by_first_name,
+                        lastName: row.approved_by_last_name,
+                    },
+                }))
+            );
+        } finally {
+            conn.release();
+        }
+    } catch (error) {
+        console.error("getStudentEnrollmentHistory error:", error);
+        return res.status(500).json({ message: "Unable to fetch enrollment validation history." });
+    }
+};
+
 export const getStudentProfile = async (req, res) => {
     try {
         const { id } = req.params;
@@ -45,7 +113,7 @@ export const getStudentProfile = async (req, res) => {
             const [users] = await conn.query(
                 `SELECT u.id, u.first_name, u.last_name, u.lrn, u.email,
                         u.parent_name, u.parent_email, u.parent_contact,
-                        sr.grade_level, sr.section
+                        u.account_status, u.profile_photo_stored_name, sr.grade_level, sr.section
                  FROM users u
                  LEFT JOIN student_records sr ON u.lrn = sr.lrn
                  WHERE u.id = ? AND u.role = 'student'`,
@@ -89,6 +157,8 @@ export const getStudentProfile = async (req, res) => {
                     parentName: user.parent_name || null,
                     parentEmail: user.parent_email || null,
                     parentContact: user.parent_contact || null,
+                    accountStatus: user.account_status,
+                    profilePhotoUrl: buildProofUrl(req, user.profile_photo_stored_name),
                 },
                 stats: {
                     reportedCount: reported.length,

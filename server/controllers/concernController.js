@@ -6,6 +6,14 @@ import { broadcast, broadcastToRole, sendToUser } from "../services/sseManager.j
 import { sendParentConcernNotificationEmail, isMailConfigured } from "../services/mailService.js";
 
 const STATUS_FLOW = ["pending", "read", "in_review", "resolved"];
+const VALID_STATUS_FILTERS = [...STATUS_FLOW, "deleted"];
+
+const normalizeAccountStatus = (status) => {
+    if (!status) return "active";
+    if (status === "approved") return "active";
+    if (status === "rejected") return "pending_revalidation";
+    return status;
+};
 
 const buildConcernResponse = (record) => {
     const resp = {
@@ -16,6 +24,12 @@ const buildConcernResponse = (record) => {
         status: record.status,
         createdAt: record.created_at,
         updatedAt: record.updated_at,
+        schoolYear: record.school_year_id
+            ? {
+                  id: record.school_year_id,
+                  label: record.school_year_label || null,
+              }
+            : null,
         userId: record.user_id,
         firstName: record.first_name,
         lastName: record.last_name,
@@ -39,6 +53,30 @@ export const createConcern = async (req, res) => {
     try {
         const { title, description, category } = req.body;
 
+        const connStatus = await pool.getConnection();
+        let accountStatus;
+        try {
+            const [rows] = await connStatus.query(
+                `SELECT account_status FROM users WHERE id = ? LIMIT 1`,
+                [req.user.id]
+            );
+            accountStatus = normalizeAccountStatus(rows[0]?.account_status);
+        } finally {
+            connStatus.release();
+        }
+        if (accountStatus === "pending_revalidation") {
+            return res.status(403).json({ message: "Your account requires enrollment revalidation before submitting concerns." });
+        }
+        if (accountStatus === "inactive") {
+            return res.status(403).json({ message: "Inactive students cannot submit concerns." });
+        }
+        if (accountStatus === "graduated") {
+            return res.status(403).json({ message: "Graduated students cannot submit new concerns." });
+        }
+        if (accountStatus === "pending_approval" || accountStatus === "transferred") {
+            return res.status(403).json({ message: "You cannot submit concerns while your account is not active." });
+        }
+
         let involvedStudentIds = [];
         if (req.body.involvedStudentIds) {
             try {
@@ -56,6 +94,11 @@ export const createConcern = async (req, res) => {
 
         const conn = await pool.getConnection();
         try {
+            const [activeYears] = await conn.query(
+                "SELECT id FROM school_years WHERE status = 'active' LIMIT 1"
+            );
+            const activeSchoolYearId = activeYears[0]?.id || null;
+
             const [existing] = await conn.query(
                 `SELECT id FROM concerns 
                  WHERE user_id = ? AND title = ? AND status IN ('pending', 'read', 'in_review') LIMIT 1`,
@@ -69,9 +112,9 @@ export const createConcern = async (req, res) => {
             }
 
             const [result] = await conn.query(
-                `INSERT INTO concerns (user_id, title, description, category, status)
-                 VALUES (?, ?, ?, ?, 'pending')`,
-                [req.user.id, title, description, category || "general"]
+                `INSERT INTO concerns (user_id, school_year_id, title, description, category, status)
+                 VALUES (?, ?, ?, ?, ?, 'pending')`,
+                [req.user.id, activeSchoolYearId, title, description, category || "general"]
             );
 
             await conn.query(
@@ -113,8 +156,10 @@ export const createConcern = async (req, res) => {
             }
 
             const [rows] = await conn.query(
-                `SELECT c.*, u.first_name, u.last_name, u.lrn
-                 FROM concerns c JOIN users u ON c.user_id = u.id
+                `SELECT c.*, sy.label AS school_year_label, u.first_name, u.last_name, u.lrn
+                 FROM concerns c
+                 LEFT JOIN school_years sy ON c.school_year_id = sy.id
+                 JOIN users u ON c.user_id = u.id
                  WHERE c.id = ?`,
                 [result.insertId]
             );
@@ -153,19 +198,26 @@ export const getConcerns = async (req, res) => {
             const isCounselor = req.user.role === "guidance_counselor";
             let query = isCounselor
                 ? `SELECT c.*, u.first_name, u.last_name, u.lrn,
+                          sy.label AS school_year_label,
                           (SELECT COUNT(*) FROM concerns c2 WHERE c2.user_id = c.user_id) AS concern_count
                    FROM concerns c 
+                   LEFT JOIN school_years sy ON c.school_year_id = sy.id
                    JOIN users u ON c.user_id = u.id 
                    WHERE 1=1`
-                : `SELECT c.* FROM concerns c WHERE c.user_id = ?`;
+                : `SELECT c.*, sy.label AS school_year_label
+                   FROM concerns c
+                   LEFT JOIN school_years sy ON c.school_year_id = sy.id
+                   WHERE c.user_id = ?`;
 
             if (!isCounselor) {
                 params.push(req.user.id);
             }
 
-            if (status && STATUS_FLOW.includes(status)) {
+            if (status && VALID_STATUS_FILTERS.includes(status)) {
                 query += " AND c.status = ?";
                 params.push(status);
+            } else {
+                query += " AND c.status != 'deleted'";
             }
 
             if (category) {
@@ -262,7 +314,7 @@ export const updateConcernStatus = async (req, res) => {
             const statusMessages = {
                 pending: "Your concern has been received and is pending review.",
                 read: "Your concern has been read by the guidance counselor.",
-                in_review: "Your concern is currently being reviewed.",
+                in_review: "Your concern is currently in progress.",
                 resolved: "Your concern has been resolved. Thank you for reaching out.",
             };
 
@@ -285,7 +337,13 @@ export const updateConcernStatus = async (req, res) => {
                 );
             }
 
-            const [updatedRows] = await conn.query("SELECT * FROM concerns WHERE id = ?", [id]);
+            const [updatedRows] = await conn.query(
+                `SELECT c.*, sy.label AS school_year_label
+                 FROM concerns c
+                 LEFT JOIN school_years sy ON c.school_year_id = sy.id
+                 WHERE c.id = ?`,
+                [id]
+            );
             const updated = buildConcernResponse(updatedRows[0]);
 
             const ssePayload = { concernId: Number(id), newStatus: status, updatedAt: updated.updatedAt };
@@ -317,7 +375,7 @@ export const deleteConcern = async (req, res) => {
         const { id } = req.params;
         const conn = await pool.getConnection();
         try {
-            const [rows] = await conn.query("SELECT user_id FROM concerns WHERE id = ?", [id]);
+            const [rows] = await conn.query("SELECT user_id, status FROM concerns WHERE id = ?", [id]);
             if (!rows.length) {
                 return res.status(404).json({ message: "Concern not found." });
             }
@@ -326,8 +384,16 @@ export const deleteConcern = async (req, res) => {
                 return res.status(403).json({ message: "You cannot delete this concern." });
             }
 
-            const studentUserId = rows[0].user_id;
-            await conn.query("DELETE FROM concerns WHERE id = ?", [id]);
+            if (rows[0].status === "deleted") {
+                return res.status(404).json({ message: "Concern not found." });
+            }
+
+            await conn.query("UPDATE concerns SET status = 'deleted', updated_at = NOW() WHERE id = ?", [id]);
+            await conn.query(
+                `INSERT INTO concern_status_history (concern_id, changed_by, old_status, new_status)
+                 VALUES (?, ?, ?, 'deleted')`,
+                [id, req.user.id, rows[0].status]
+            );
 
             broadcast("concern:deleted", { concernId: Number(id) });
 
@@ -341,14 +407,96 @@ export const deleteConcern = async (req, res) => {
     }
 };
 
+export const restoreConcern = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const conn = await pool.getConnection();
+        try {
+            const [rows] = await conn.query(
+                "SELECT id, user_id, title, status FROM concerns WHERE id = ?",
+                [id]
+            );
+
+            if (!rows.length) {
+                return res.status(404).json({ message: "Concern not found." });
+            }
+
+            const concern = rows[0];
+            if (concern.status !== "deleted") {
+                return res.status(400).json({ message: "Only archived concerns can be restored." });
+            }
+
+            const [historyRows] = await conn.query(
+                `SELECT old_status
+                 FROM concern_status_history
+                 WHERE concern_id = ?
+                   AND new_status = 'deleted'
+                 ORDER BY created_at DESC, id DESC
+                 LIMIT 1`,
+                [id]
+            );
+            const restoreStatus = STATUS_FLOW.includes(historyRows[0]?.old_status)
+                ? historyRows[0].old_status
+                : "in_review";
+            const restoreLabel = restoreStatus === "in_review" ? "in review" : restoreStatus.replace("_", " ");
+
+            await conn.query(
+                "UPDATE concerns SET status = ?, updated_at = NOW() WHERE id = ?",
+                [restoreStatus, id]
+            );
+
+            await conn.query(
+                `INSERT INTO concern_status_history (concern_id, changed_by, old_status, new_status)
+                 VALUES (?, ?, 'deleted', ?)`,
+                [id, req.user.id, restoreStatus]
+            );
+
+            await insertNotification(
+                conn,
+                concern.user_id,
+                concern.id,
+                `${concern.title} — Your archived concern has been restored to ${restoreLabel}.`
+            );
+
+            const [updatedRows] = await conn.query(
+                `SELECT c.*, sy.label AS school_year_label, u.first_name, u.last_name, u.lrn
+                 FROM concerns c
+                 LEFT JOIN school_years sy ON c.school_year_id = sy.id
+                 JOIN users u ON c.user_id = u.id
+                 WHERE c.id = ?`,
+                [id]
+            );
+            const updated = buildConcernResponse(updatedRows[0]);
+
+            const ssePayload = { concernId: Number(id), newStatus: restoreStatus, updatedAt: updated.updatedAt };
+            sendToUser(concern.user_id, "concern:statusUpdate", ssePayload);
+            sendToUser(concern.user_id, "notification:new", {
+                message: `${concern.title} — Your archived concern has been restored to ${restoreLabel}.`,
+            });
+            broadcast("concern:statusUpdate", ssePayload);
+
+            return res.json({
+                message: `Concern restored to ${restoreLabel}.`,
+                concern: updated,
+            });
+        } finally {
+            conn.release();
+        }
+    } catch (error) {
+        console.error("restoreConcern error:", error);
+        return res.status(500).json({ message: "Unable to restore concern." });
+    }
+};
+
 export const generateConcernReport = async (req, res) => {
     try {
         const { startDate, endDate, status, category } = req.query;
         const conn = await pool.getConnection();
         try {
             const params = [];
-            let query = `SELECT c.*, u.first_name, u.last_name, u.lrn 
+            let query = `SELECT c.*, sy.label AS school_year_label, u.first_name, u.last_name, u.lrn 
                          FROM concerns c 
+                         LEFT JOIN school_years sy ON c.school_year_id = sy.id
                          JOIN users u ON c.user_id = u.id 
                          WHERE 1=1`;
 
@@ -362,7 +510,7 @@ export const generateConcernReport = async (req, res) => {
                 params.push(endDate);
             }
 
-            if (status && STATUS_FLOW.includes(status)) {
+            if (status && VALID_STATUS_FILTERS.includes(status)) {
                 query += " AND c.status = ?";
                 params.push(status);
             }

@@ -16,7 +16,10 @@ import ForgotPassword from './pages/ForgotPassword'
 import ResetPassword from './pages/ResetPassword'
 import Dashboard from './pages/Dashboard'
 import StudentProfile from './pages/StudentProfile'
+import Revalidation from './pages/Revalidation'
+import SchoolYears from './pages/SchoolYears'
 import ProtectedRoute from './components/ProtectedRoute'
+import PublicOnlyRoute from './components/PublicOnlyRoute'
 import { AuthProvider } from './context/AuthContext'
 import { ToastProvider } from './context/ToastContext'
 import './index.css'
@@ -27,8 +30,22 @@ const router = createBrowserRouter(
       <Route index element={<Home />} />
       <Route path="about" element={<About />} />
       <Route path="concerns" element={<Concerns />} />
-      <Route path="login" element={<Login />} />
-      <Route path="register" element={<Register />} />
+      <Route
+        path="login"
+        element={
+          <PublicOnlyRoute>
+            <Login />
+          </PublicOnlyRoute>
+        }
+      />
+      <Route
+        path="register"
+        element={
+          <PublicOnlyRoute>
+            <Register />
+          </PublicOnlyRoute>
+        }
+      />
       <Route path="forgot-password" element={<ForgotPassword />} />
       <Route path="reset-password" element={<ResetPassword />} />
       <Route
@@ -40,7 +57,39 @@ const router = createBrowserRouter(
         }
       />
       <Route
+        path="revalidation"
+        element={
+          <ProtectedRoute>
+            <Revalidation />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="school-years"
+        element={
+          <ProtectedRoute>
+            <SchoolYears />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="admin"
+        element={
+          <ProtectedRoute>
+            <Dashboard />
+          </ProtectedRoute>
+        }
+      />
+      <Route
         path="dashboard/student/:id"
+        element={
+          <ProtectedRoute>
+            <StudentProfile />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="admin/student/:id"
         element={
           <ProtectedRoute>
             <StudentProfile />

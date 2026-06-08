@@ -1,10 +1,11 @@
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import axios from 'axios'
 import { useToast } from '../../context/ToastContext'
 import Spinner from '../Spinner'
 import ConcernFilters from './ConcernFilters'
 import ConcernCard from './ConcernCard'
+import Pagination from '../Pagination'
 
 const ConcernList = ({ isCounselor, onViewReport, onGenerateOverallReport, generatingReport, refreshKey }) => {
   const navigate = useNavigate()
@@ -16,6 +17,7 @@ const ConcernList = ({ isCounselor, onViewReport, onGenerateOverallReport, gener
   const [showFlagged, setShowFlagged] = useState(false)
   const [updatingId, setUpdatingId] = useState(null)
   const [deletingId, setDeletingId] = useState(null)
+  const [restoringId, setRestoringId] = useState(null)
   const eventSourceRef = useRef(null)
 
   const [statusFilter, setStatusFilter] = useState('all')
@@ -23,18 +25,26 @@ const ConcernList = ({ isCounselor, onViewReport, onGenerateOverallReport, gener
   const [sortBy, setSortBy] = useState('created_at')
   const [sortOrder, setSortOrder] = useState('DESC')
   const [searchQuery, setSearchQuery] = useState('')
+  const [currentPage, setCurrentPage] = useState(1)
+  const PAGE_SIZE = 6
 
-  const fetchConcerns = useCallback(async () => {
+  const fetchConcerns = useCallback(async (overrideStatus = null) => {
     try {
       const params = new URLSearchParams()
-      if (statusFilter !== 'all') params.append('status', statusFilter)
+      const currentStatus = overrideStatus ?? statusFilter
+      if (currentStatus !== 'all') params.append('status', currentStatus)
       if (categoryFilter !== 'all') params.append('category', categoryFilter)
       params.append('sortBy', sortBy)
       params.append('sortOrder', sortOrder)
 
       const res = await axios.get(`/api/concerns?${params.toString()}`)
-      setConcerns(res.data)
-      setFilteredConcerns(res.data)
+      const concernsFromServer = res.data
+      const visibleConcerns = currentStatus === 'all'
+        ? concernsFromServer.filter(c => c.status !== 'deleted')
+        : concernsFromServer
+
+      setConcerns(visibleConcerns)
+      setFilteredConcerns(visibleConcerns)
     } catch (error) {
       console.error('Error fetching concerns:', error)
     } finally {
@@ -97,13 +107,12 @@ const ConcernList = ({ isCounselor, onViewReport, onGenerateOverallReport, gener
   }, [fetchConcerns])
 
   useEffect(() => {
+    let filtered = concerns
     if (!searchQuery.trim()) {
-      setFilteredConcerns(concerns)
-      return
-    }
-    const q = searchQuery.toLowerCase()
-    setFilteredConcerns(
-      concerns.filter(c =>
+      filtered = concerns
+    } else {
+      const q = searchQuery.toLowerCase()
+      filtered = concerns.filter(c =>
         c.title.toLowerCase().includes(q) ||
         c.description.toLowerCase().includes(q) ||
         (isCounselor && (
@@ -111,8 +120,17 @@ const ConcernList = ({ isCounselor, onViewReport, onGenerateOverallReport, gener
           c.studentId?.toLowerCase().includes(q)
         ))
       )
-    )
-  }, [searchQuery, concerns, isCounselor])
+    }
+    
+    if (statusFilter === 'all') {
+      filtered = filtered.filter(c => c.status !== 'deleted')
+    }
+    setFilteredConcerns(filtered)
+  }, [searchQuery, concerns, isCounselor, statusFilter])
+
+  useEffect(() => {
+    setCurrentPage(1)
+  }, [searchQuery, statusFilter, categoryFilter, sortBy, sortOrder, concerns])
 
   const handleStatusUpdate = async (concernId, newStatus) => {
     setUpdatingId(concernId)
@@ -132,29 +150,56 @@ const ConcernList = ({ isCounselor, onViewReport, onGenerateOverallReport, gener
   }
 
   const handleDelete = async (concernId) => {
-    if (!window.confirm('Are you sure you want to delete this concern?')) return
+    if (!window.confirm('Archive this concern? It will be hidden from the normal list but preserved for records.')) return
     setDeletingId(concernId)
+    setConcerns(prev => prev.filter(c => c.id !== concernId))
+    setFilteredConcerns(prev => prev.filter(c => c.id !== concernId))
     try {
-      setConcerns(prev => prev.filter(c => c.id !== concernId))
       await axios.delete(`/api/concerns/${concernId}`)
-      fetchConcerns()
-      showToast('Concern deleted successfully!', 'success')
+      setCurrentPage(1)
+      await fetchConcerns()
+      showToast('Concern archived successfully.', 'success')
     } catch {
-      showToast('Failed to delete concern. Please try again.', 'error')
+      showToast('Failed to archive concern. Please try again.', 'error')
       fetchConcerns()
     } finally {
       setDeletingId(null)
     }
   }
 
+  const handleRestore = async (concernId) => {
+    if (!window.confirm('Restore this archived concern to its previous status?')) return
+    setRestoringId(concernId)
+    try {
+      const res = await axios.patch(`/api/concerns/${concernId}/restore`)
+      showToast(res.data?.message || 'Concern restored.', 'success')
+      setCurrentPage(1)
+      await fetchConcerns(statusFilter)
+      window.dispatchEvent(new CustomEvent('notifications:refresh'))
+    } catch (error) {
+      showToast(error.response?.data?.message || 'Failed to restore concern. Please try again.', 'error')
+    } finally {
+      setRestoringId(null)
+    }
+  }
+
   const flaggedWithMultiple = flaggedStudents.filter(s => s.concernCount >= 2)
+
+  const pagedConcerns = useMemo(() => {
+    const start = (currentPage - 1) * PAGE_SIZE
+    return filteredConcerns.slice(start, start + PAGE_SIZE)
+  }, [filteredConcerns, currentPage])
+
+  const totalPages = Math.max(1, Math.ceil(filteredConcerns.length / PAGE_SIZE))
 
   return (
     <div className="bg-white rounded-xl shadow-lg p-6 md:p-8">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-4">
-        <h2 className="text-2xl font-bold text-primary-600">
-          {isCounselor ? 'All Concerns' : 'My Concerns'}
-        </h2>
+        <div className="flex flex-col gap-3">
+          <h2 className="text-2xl font-bold text-primary-600">
+            {isCounselor ? 'All Concerns' : 'My Concerns'}
+          </h2>
+        </div>
         <div className="flex flex-wrap gap-2">
           {isCounselor && flaggedWithMultiple.length > 0 && (
             <button
@@ -163,6 +208,25 @@ const ConcernList = ({ isCounselor, onViewReport, onGenerateOverallReport, gener
             >
               <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20"><path d="M3 6a3 3 0 013-3h10l-4 4 4 4H6a3 3 0 01-3-3V6z" /></svg>
               Flagged Students ({flaggedWithMultiple.length})
+            </button>
+          )}
+          {isCounselor && (
+            <button
+              type="button"
+              onClick={() => {
+                setShowFlagged(false)
+                setStatusFilter((current) => current === 'deleted' ? 'all' : 'deleted')
+              }}
+              className={`px-4 py-2 rounded-lg transition font-semibold text-sm flex items-center gap-2 ${
+                statusFilter === 'deleted'
+                  ? 'bg-red-600 text-white hover:bg-red-700'
+                  : 'bg-red-100 text-red-700 hover:bg-red-200'
+              }`}
+            >
+              <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                <path fillRule="evenodd" d="M8.5 2a1 1 0 00-.894.553L7.118 3.5H4a1 1 0 000 2h.293l.853 10.24A2.5 2.5 0 007.638 18h4.724a2.5 2.5 0 002.492-2.26l.853-10.24H16a1 1 0 100-2h-3.118l-.488-.947A1 1 0 0011.5 2h-3zM7.5 7a.75.75 0 01.75.75v6.5a.75.75 0 01-1.5 0v-6.5A.75.75 0 017.5 7zm5 0a.75.75 0 01.75.75v6.5a.75.75 0 01-1.5 0v-6.5A.75.75 0 0112.5 7z" clipRule="evenodd" />
+              </svg>
+              {statusFilter === 'deleted' ? 'Back to Active Concerns' : 'Archived Concerns'}
             </button>
           )}
           {isCounselor && (
@@ -212,29 +276,33 @@ const ConcernList = ({ isCounselor, onViewReport, onGenerateOverallReport, gener
         onSortByChange={setSortBy}
         sortOrder={sortOrder}
         onSortOrderChange={setSortOrder}
+        includeArchived={isCounselor}
       />
 
       {loading ? (
         <div className="text-center py-8">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600 mx-auto"></div>
         </div>
-      ) : filteredConcerns.length === 0 ? (
-        <p className="text-gray-600 text-center py-8">No concerns found.</p>
       ) : (
-        <div className="space-y-4">
-          {filteredConcerns.map((concern) => (
-            <ConcernCard
-              key={concern.id}
-              concern={concern}
-              isCounselor={isCounselor}
-              onStatusUpdate={handleStatusUpdate}
-              onDelete={handleDelete}
-              onViewReport={onViewReport}
-              isUpdating={updatingId === concern.id}
-              isDeleting={deletingId === concern.id}
-            />
-          ))}
-        </div>
+        <>
+          <div className="space-y-4">
+            {pagedConcerns.map((concern) => (
+              <ConcernCard
+                key={concern.id}
+                concern={concern}
+                isCounselor={isCounselor}
+                onStatusUpdate={handleStatusUpdate}
+                onDelete={handleDelete}
+                onRestore={handleRestore}
+                onViewReport={onViewReport}
+                isUpdating={updatingId === concern.id}
+                isDeleting={deletingId === concern.id}
+                isRestoring={restoringId === concern.id}
+              />
+            ))}
+          </div>
+          <Pagination currentPage={currentPage} totalPages={totalPages} onPageChange={setCurrentPage} />
+        </>
       )}
     </div>
   )
