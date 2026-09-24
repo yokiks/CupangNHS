@@ -29,7 +29,7 @@ const StudentProfile = () => {
   const { showToast } = useToast()
   const [data, setData] = useState(null)
   const [loading, setLoading] = useState(true)
-  const [actionLoading, setActionLoading] = useState(false)
+  const [actionLoading, setActionLoading] = useState(null)
   const [tab, setTab] = useState('reported')
   const [statusFilter, setStatusFilter] = useState('all')
   const [categoryFilter, setCategoryFilter] = useState('all')
@@ -57,7 +57,7 @@ const StudentProfile = () => {
       return
     }
 
-    setActionLoading(true)
+    setActionLoading('allow-revalidation')
     try {
       await axios.patch(`/api/revalidation-requests/students/${id}/allow-submission`)
       showToast('Student can now proceed with enrollment revalidation.', 'success')
@@ -65,7 +65,24 @@ const StudentProfile = () => {
     } catch (error) {
       showToast(error.response?.data?.message || 'Unable to enable revalidation submission.', 'error')
     } finally {
-      setActionLoading(false)
+      setActionLoading(null)
+    }
+  }
+
+  const handleMarkAsGraduated = async () => {
+    if (!window.confirm('Mark this Grade 10 student account as graduated?')) {
+      return
+    }
+
+    setActionLoading('mark-graduated')
+    try {
+      await axios.patch(`/api/revalidation-requests/students/${id}/mark-graduated`)
+      showToast('Student account marked as graduated.', 'success')
+      fetchProfile()
+    } catch (error) {
+      showToast(error.response?.data?.message || 'Unable to mark student as graduated.', 'error')
+    } finally {
+      setActionLoading(null)
     }
   }
 
@@ -83,6 +100,8 @@ const StudentProfile = () => {
   if (!data) return null
 
   const { student, stats, reportedConcerns, involvedConcerns } = data
+  const gradeNumber = Number(String(student.gradeLevel || '').match(/\d{1,2}/)?.[0] || 0)
+  const isGrade10PendingRevalidation = student.accountStatus === 'pending_revalidation' && gradeNumber >= 10
 
   const activeConcerns = tab === 'reported' ? reportedConcerns : involvedConcerns
   const filtered = activeConcerns.filter(c => {
@@ -149,19 +168,34 @@ const StudentProfile = () => {
               {student.accountStatus === 'pending_revalidation' && (
                 <div className="mt-4 rounded-2xl border border-yellow-200 bg-yellow-50 p-4">
                   <p className="text-sm text-yellow-800">
-                    This student is awaiting enrollment revalidation submission.
+                    {isGrade10PendingRevalidation
+                      ? 'This student is already Grade 10 based on the latest record. Mark as graduated instead of enabling revalidation.'
+                      : 'This student is awaiting enrollment revalidation submission.'}
                   </p>
                   <p className="mt-1 text-xs text-yellow-700">
-                    Use this only when the student cannot proceed because the account needs guidance-enabled manual review.
+                    {isGrade10PendingRevalidation
+                      ? 'Graduated accounts remain visible to guidance but cannot submit new concerns.'
+                      : 'Use this only when the student cannot proceed because the account needs guidance-enabled manual review.'}
                   </p>
-                  <button
-                    type="button"
-                    onClick={handleAllowRevalidationSubmission}
-                    disabled={actionLoading}
-                    className="mt-3 rounded-lg bg-primary-600 px-4 py-2 text-sm font-semibold text-white hover:bg-primary-700 disabled:opacity-50"
-                  >
-                    {actionLoading ? 'Enabling...' : 'Enable Revalidation Form'}
-                  </button>
+                  {isGrade10PendingRevalidation ? (
+                    <button
+                      type="button"
+                      onClick={handleMarkAsGraduated}
+                      disabled={Boolean(actionLoading)}
+                      className="mt-3 rounded-lg bg-primary-600 px-4 py-2 text-sm font-semibold text-white hover:bg-primary-700 disabled:opacity-50"
+                    >
+                      {actionLoading === 'mark-graduated' ? 'Marking...' : 'Mark as Graduated'}
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={handleAllowRevalidationSubmission}
+                      disabled={Boolean(actionLoading)}
+                      className="mt-3 rounded-lg bg-primary-600 px-4 py-2 text-sm font-semibold text-white hover:bg-primary-700 disabled:opacity-50"
+                    >
+                      {actionLoading === 'allow-revalidation' ? 'Enabling...' : 'Enable Revalidation Form'}
+                    </button>
+                  )}
                 </div>
               )}
             </div>

@@ -1,6 +1,24 @@
 import { useEffect, useState } from 'react'
 import axios from 'axios'
 
+const STATUS_TEXT_COLORS = {
+  pending: 'text-gray-800',
+  read: 'text-blue-800',
+  in_review: 'text-yellow-800',
+  resolved: 'text-green-800',
+}
+
+const getNotificationStatus = (notification) => {
+  const explicitStatus = notification.status || notification.concernStatus || notification.newStatus
+  if (STATUS_TEXT_COLORS[explicitStatus]) return explicitStatus
+
+  const message = String(notification.message || '').toLowerCase()
+  if (message.includes('resolved') || message.includes('restored to resolved')) return 'resolved'
+  if (message.includes('in progress') || message.includes('in review') || message.includes('restored to in progress')) return 'in_review'
+  if (message.includes('read by the guidance counselor') || message.includes('restored to read')) return 'read'
+  return 'pending'
+}
+
 const NotificationFab = () => {
   const [unreadCount, setUnreadCount] = useState(0)
   const [notifications, setNotifications] = useState([])
@@ -146,7 +164,7 @@ const NotificationFab = () => {
                       <div className="flex items-start gap-3">
                         <div className={`mt-1 w-2.5 h-2.5 rounded-full ${n.read ? 'bg-gray-300' : 'bg-primary-500'}`} />
                         <div className="flex-1">
-                          <p className="text-sm text-gray-800">{n.message}</p>
+                          <p className={`text-sm ${STATUS_TEXT_COLORS[getNotificationStatus(n)]}`}>{n.message}</p>
                           <p className="text-[11px] text-gray-500 mt-1">
                             {new Date(n.createdAt).toLocaleString()}
                           </p>

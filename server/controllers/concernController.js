@@ -84,7 +84,21 @@ export const createConcern = async (req, res) => {
                     ? JSON.parse(req.body.involvedStudentIds)
                     : req.body.involvedStudentIds;
             } catch {
-                involvedStudentIds = [];
+                return res.status(400).json({ message: "The involved-student selection is invalid." });
+            }
+
+            if (!Array.isArray(involvedStudentIds)) {
+                return res.status(400).json({ message: "The involved-student selection is invalid." });
+            }
+
+            const normalizedIds = involvedStudentIds.map(Number);
+            if (normalizedIds.some((id) => !Number.isInteger(id) || id <= 0)) {
+                return res.status(400).json({ message: "The involved-student selection is invalid." });
+            }
+            involvedStudentIds = [...new Set(normalizedIds)];
+
+            if (involvedStudentIds.includes(Number(req.user.id))) {
+                return res.status(400).json({ message: "You cannot add yourself as an involved student." });
             }
         }
 
@@ -109,6 +123,25 @@ export const createConcern = async (req, res) => {
                     message:
                         "You already submitted this concern. Please wait for the counselor to respond or update the existing concern.",
                 });
+            }
+
+            if (involvedStudentIds.length > 0) {
+                const [eligibleStudents] = await conn.query(
+                    `SELECT id
+                     FROM users
+                     WHERE role = 'student'
+                       AND account_status = 'active'
+                       AND id IN (?)`,
+                    [involvedStudentIds]
+                );
+                const eligibleIds = new Set(eligibleStudents.map((student) => Number(student.id)));
+                const hasUnavailableStudent = involvedStudentIds.some((id) => !eligibleIds.has(id));
+
+                if (hasUnavailableStudent) {
+                    return res.status(400).json({
+                        message: "One or more involved students are unavailable or no longer active. Remove them and try again.",
+                    });
+                }
             }
 
             const [result] = await conn.query(
@@ -579,24 +612,79 @@ export const getFlaggedStudents = async (req, res) => {
     try {
         const conn = await pool.getConnection();
         try {
-            const [rows] = await conn.query(
-                `SELECT u.id, u.first_name, u.last_name, u.lrn,
-                        COUNT(c.id) AS concern_count
+            let schoolYearId = Number(req.query.schoolYearId);
+            let schoolYear;
+
+            if (req.query.schoolYearId !== undefined && (!Number.isInteger(schoolYearId) || schoolYearId <= 0)) {
+                return res.status(400).json({ message: "A valid school year is required." });
+            }
+
+            if (req.query.schoolYearId !== undefined) {
+                const [years] = await conn.query(
+                    "SELECT id, label, status FROM school_years WHERE id = ? LIMIT 1",
+                    [schoolYearId]
+                );
+                schoolYear = years[0];
+            } else {
+                const [years] = await conn.query(
+                    "SELECT id, label, status FROM school_years WHERE status = 'active' LIMIT 1"
+                );
+                schoolYear = years[0];
+                schoolYearId = Number(schoolYear?.id);
+            }
+
+            if (!schoolYear) {
+                return res.status(404).json({ message: "School year not found." });
+            }
+
+            const [reporterRows] = await conn.query(
+                `SELECT u.id, u.first_name, u.last_name, u.lrn, u.account_status,
+                        COUNT(DISTINCT c.id) AS activity_count,
+                        COUNT(DISTINCT CASE WHEN c.status = 'deleted' THEN c.id END) AS archived_count,
+                        COUNT(DISTINCT CASE WHEN c.status <> 'deleted' THEN c.id END) AS current_count
                  FROM concerns c
                  JOIN users u ON c.user_id = u.id
-                 GROUP BY u.id
-                 HAVING concern_count >= 1
-                 ORDER BY concern_count DESC`
+                 WHERE c.school_year_id = ?
+                 GROUP BY u.id, u.first_name, u.last_name, u.lrn, u.account_status
+                 HAVING activity_count >= 2
+                 ORDER BY activity_count DESC, u.last_name, u.first_name`,
+                [schoolYearId]
             );
-            return res.json(
-                rows.map((r) => ({
+            const [involvedRows] = await conn.query(
+                `SELECT u.id, u.first_name, u.last_name, u.lrn, u.account_status,
+                        COUNT(DISTINCT c.id) AS activity_count,
+                        COUNT(DISTINCT CASE WHEN c.status = 'deleted' THEN c.id END) AS archived_count,
+                        COUNT(DISTINCT CASE WHEN c.status <> 'deleted' THEN c.id END) AS current_count
+                 FROM concern_involved_students cis
+                 JOIN concerns c ON c.id = cis.concern_id
+                 JOIN users u ON u.id = cis.user_id
+                 WHERE c.school_year_id = ?
+                 GROUP BY u.id, u.first_name, u.last_name, u.lrn, u.account_status
+                 HAVING activity_count >= 2
+                 ORDER BY activity_count DESC, u.last_name, u.first_name`,
+                [schoolYearId]
+            );
+
+            const mapStudent = (r, countKey) => ({
                     id: r.id,
                     firstName: r.first_name,
                     lastName: r.last_name,
                     lrn: r.lrn,
-                    concernCount: Number(r.concern_count),
-                }))
-            );
+                    accountStatus: r.account_status,
+                    [countKey]: Number(r.activity_count),
+                    currentCount: Number(r.current_count),
+                    archivedCount: Number(r.archived_count),
+                });
+
+            return res.json({
+                schoolYear: {
+                    id: schoolYear.id,
+                    label: schoolYear.label,
+                    status: schoolYear.status,
+                },
+                frequentReporters: reporterRows.map((row) => mapStudent(row, "reportCount")),
+                frequentlyInvolved: involvedRows.map((row) => mapStudent(row, "involvedCount")),
+            });
         } finally {
             conn.release();
         }

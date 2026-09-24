@@ -223,7 +223,8 @@ export async function sendParentConcernNotificationEmail({
             `addressing a concern involving your child, ${studentName}.\n\n` +
             `Concern: ${concernTitle}\nCategory: ${categoryLabel}\n\n` +
             `The guidance counselor handling this matter is ${counselorName}. ` +
-            `You may visit or contact the school guidance office for more details.\n\n` +
+            `You may visit the Guidance Office for further discussion and clarification regarding this matter. ` +
+            `Office hours are Monday to Friday, 8:00 AM to 5:00 PM.\n\n` +
             `Thank you for your continued support.\n\n` +
             `Respectfully,\nCupang National High School Guidance Office`,
         html: `
@@ -240,7 +241,7 @@ export async function sendParentConcernNotificationEmail({
                         <tr><td style="padding:8px;border:1px solid #e5e7eb;font-weight:bold;background:#f9fafb">Category</td><td style="padding:8px;border:1px solid #e5e7eb">${categoryLabel}</td></tr>
                         <tr><td style="padding:8px;border:1px solid #e5e7eb;font-weight:bold;background:#f9fafb">Counselor</td><td style="padding:8px;border:1px solid #e5e7eb">${counselorName}</td></tr>
                     </table>
-                    <p>You may visit or contact the school guidance office for more details.</p>
+                    <p>You may visit the Guidance Office for further discussion and clarification regarding this matter. Office hours are Monday to Friday, 8:00 AM to 5:00 PM.</p>
                     <p style="margin-top:24px">Thank you for your continued support.</p>
                     <p style="margin-top:16px;color:#6b7280;font-size:13px">Respectfully,<br><strong>Cupang National High School Guidance Office</strong></p>
                 </div>

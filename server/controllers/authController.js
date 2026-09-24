@@ -18,6 +18,16 @@ const FRONTEND_URL = (process.env.FRONTEND_URL || process.env.CLIENT_ORIGIN || "
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
+const NAME_PATTERN = /^(?=.{1,100}$)\p{L}+(?:['’-]\p{L}+)*(?:\.(?=\s|$))?(?: \p{L}+(?:['’-]\p{L}+)*(?:\.(?=\s|$))?)*$/u;
+const GMAIL_PATTERN = /^(?=.{1,64}@)(?![^@]*\.\.)[a-z0-9](?:[a-z0-9.]{0,62}[a-z0-9])?(?:\+[a-z0-9._-]+)?@gmail\.com$/i;
+const SECTION_PATTERN = /^(?=.{1,50}$)\p{L}+(?:[ .'-]\p{L}+)*$/u;
+
+const formatProperName = (value) => String(value || "")
+    .trim()
+    .replace(/\s+/g, " ")
+    .toLocaleLowerCase()
+    .replace(/(^|[\s'’-])(\p{L})/gu, (_, separator, letter) => `${separator}${letter.toLocaleUpperCase()}`);
+
 const issueToken = (user) => {
     return jwt.sign(
         {
@@ -97,25 +107,13 @@ const applyEnrollmentHistoryFallback = async (conn, user) => {
 };
 
 const parseGradeAndSection = (value) => {
-    const raw = value?.trim();
-    if (!raw) return null;
+    const match = String(value || "").trim().match(/^Grade\s+(7|8|9|10)\s+-\s+(.+)$/i);
+    if (!match) return null;
 
-    const gradeMatch = raw.match(/(?:grade\s*)?(\d{1,2})/i);
-    if (!gradeMatch) return null;
+    const section = formatProperName(match[2]);
+    if (!SECTION_PATTERN.test(section)) return null;
 
-    const gradeLevel = gradeMatch[1];
-    let section = raw
-        .replace(gradeMatch[0], "")
-        .replace(/^[-–—\s]+/, "")
-        .trim();
-
-    if (!section && raw.includes("-")) {
-        section = raw.split("-").slice(1).join("-").trim();
-    }
-
-    if (!section) return null;
-
-    return { gradeLevel, section };
+    return { gradeLevel: match[1], section };
 };
 
 const getExpectedNextGrade = (gradeLevel) => {
@@ -254,7 +252,7 @@ export const registerUser = async (req, res) => {
         } = req.body;
 
         const allowedRoles = ["student"];
-        const email = studentEmail || emailFallback;
+        const email = String(studentEmail || emailFallback || "").trim().toLowerCase();
 
         if (!firstName || !lastName || !username || !password || !email) {
             return res.status(400).json({ message: "Missing required fields." });
@@ -268,20 +266,31 @@ export const registerUser = async (req, res) => {
             return res.status(400).json({ message: "Invalid role selected." });
         }
 
-        const lrn = studentId || req.body.lrn || null;
+        const lrn = String(studentId || req.body.lrn || "").trim();
+        const normalizedFirstName = formatProperName(firstName);
+        const normalizedLastName = formatProperName(lastName);
+        const normalizedParentName = formatProperName(parentName);
 
-        const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-        if (!emailPattern.test(email)) {
-            return res.status(400).json({ message: "Invalid email format." });
+        if (!NAME_PATTERN.test(normalizedFirstName) || !NAME_PATTERN.test(normalizedLastName)) {
+            return res.status(400).json({ message: "Names may contain letters, spaces, hyphens, periods, and apostrophes only." });
         }
 
-        if (!emailPattern.test(parentEmail)) {
-            return res.status(400).json({ message: "Invalid parent/guardian email format." });
+        if (!NAME_PATTERN.test(normalizedParentName)) {
+            return res.status(400).json({ message: "Parent/guardian name contains invalid characters." });
+        }
+
+        if (!GMAIL_PATTERN.test(email)) {
+            return res.status(400).json({ message: "Student email must be a valid @gmail.com address." });
+        }
+
+        const normalizedParentEmail = String(parentEmail).trim().toLowerCase();
+        if (!GMAIL_PATTERN.test(normalizedParentEmail)) {
+            return res.status(400).json({ message: "Parent/guardian email must be a valid @gmail.com address." });
         }
 
         const normalizedParentContact = String(parentContact).trim();
-        if (!/^\d{11}$/.test(normalizedParentContact)) {
-            return res.status(400).json({ message: "Parent contact number must be exactly 11 digits." });
+        if (!/^09\d{9}$/.test(normalizedParentContact)) {
+            return res.status(400).json({ message: "Parent contact must be 11 digits and start with 09." });
         }
 
         if (role === "student") {
@@ -365,15 +374,15 @@ export const registerUser = async (req, res) => {
                      school_id_proof_size
                  ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending_approval', ?, ?, ?, ?)`,
                 [
-                    firstName,
-                    lastName,
+                    normalizedFirstName,
+                    normalizedLastName,
                     username,
                     passwordHash,
                     role,
                     lrn || null,
                     email,
-                    parentName || null,
-                    parentEmail || null,
+                    normalizedParentName,
+                    normalizedParentEmail,
                     normalizedParentContact,
                     proofFile.originalName,
                     proofFile.storedName,
@@ -384,8 +393,8 @@ export const registerUser = async (req, res) => {
 
             await upsertStudentRecord(conn, {
                 lrn,
-                firstName,
-                lastName,
+                firstName: normalizedFirstName,
+                lastName: normalizedLastName,
                 gradeLevel: enrollment.gradeLevel,
                 section: enrollment.section,
             });

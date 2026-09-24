@@ -557,6 +557,97 @@ export const allowRevalidationSubmission = async (req, res) => {
     }
 };
 
+export const markStudentAsGraduated = async (req, res) => {
+    const { studentId } = req.params;
+
+    try {
+        const conn = await pool.getConnection();
+        try {
+            await conn.beginTransaction();
+
+            const [students] = await conn.query(
+                `SELECT u.id,
+                        u.account_status,
+                        sr.grade_level
+                 FROM users u
+                 LEFT JOIN student_records sr ON u.lrn = sr.lrn
+                 WHERE u.id = ? AND u.role = 'student'
+                 LIMIT 1
+                 FOR UPDATE`,
+                [studentId]
+            );
+
+            if (!students.length) {
+                await conn.rollback();
+                return res.status(404).json({ message: "Student account not found." });
+            }
+
+            const student = students[0];
+            if (student.account_status === "deleted") {
+                await conn.rollback();
+                return res.status(400).json({ message: "Archived accounts cannot be marked as graduated." });
+            }
+
+            if (student.account_status === "graduated") {
+                await conn.rollback();
+                return res.status(400).json({ message: "This student is already marked as graduated." });
+            }
+
+            const gradeNumber = getGradeNumber(student.grade_level);
+            if (gradeNumber && gradeNumber < 10) {
+                await conn.rollback();
+                return res.status(400).json({
+                    message: "Only Grade 10 students can be marked as graduated from this revalidation action.",
+                });
+            }
+
+            await conn.query(
+                `UPDATE users
+                 SET account_status = 'graduated',
+                     revalidation_submission_unlocked = FALSE,
+                     rejection_reason = NULL,
+                     rejected_at = NULL,
+                     updated_at = NOW()
+                 WHERE id = ?`,
+                [student.id]
+            );
+
+            await conn.query(
+                `UPDATE revalidation_requests
+                 SET status = 'rejected',
+                     rejection_reason = 'Student marked as graduated by guidance.',
+                     updated_at = NOW()
+                 WHERE user_id = ? AND status = 'pending_review'`,
+                [student.id]
+            );
+
+            await conn.query(
+                `INSERT INTO notifications (user_id, message, type)
+                 VALUES (?, ?, 'info')`,
+                [
+                    student.id,
+                    "Your student account has been marked as graduated by the guidance office.",
+                ]
+            );
+
+            await conn.commit();
+
+            return res.json({
+                message: "Student marked as graduated.",
+                studentStatus: "graduated",
+            });
+        } catch (error) {
+            await conn.rollback();
+            throw error;
+        } finally {
+            conn.release();
+        }
+    } catch (error) {
+        console.error("markStudentAsGraduated error:", error);
+        return res.status(500).json({ message: "Unable to mark student as graduated." });
+    }
+};
+
 export const approveRevalidationRequest = async (req, res) => {
     const { id } = req.params;
 

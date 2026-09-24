@@ -7,6 +7,69 @@ import Footer from '../components/Footer';
 import PageBackground from '../components/PageBackground';
 import { Eye, EyeOff } from "lucide-react";
 
+const MAX_PROOF_SIZE = 10 * 1024 * 1024;
+const ALLOWED_PROOF_TYPES = ['image/jpeg', 'image/png', 'application/pdf'];
+const NAME_PATTERN = /^(?=.{1,100}$)\p{L}+(?:['’-]\p{L}+)*(?:\.(?=\s|$))?(?: \p{L}+(?:['’-]\p{L}+)*(?:\.(?=\s|$))?)*$/u;
+const GMAIL_PATTERN = /^(?=.{1,64}@)(?![^@]*\.\.)[a-z0-9](?:[a-z0-9.]{0,62}[a-z0-9])?(?:\+[a-z0-9._-]+)?@gmail\.com$/i;
+const SECTION_PATTERN = /^(?=.{1,50}$)\p{L}+(?:[ .'-]\p{L}+)*$/u;
+
+const formatProperName = (value) => value
+  .trim()
+  .replace(/\s+/g, ' ')
+  .toLocaleLowerCase()
+  .replace(/(^|[\s'’-])(\p{L})/gu, (_, separator, letter) => `${separator}${letter.toLocaleUpperCase()}`);
+
+const validateField = (name, value, values) => {
+  const text = typeof value === 'string' ? value.trim() : value;
+  switch (name) {
+    case 'firstName':
+    case 'lastName':
+      if (!text) return 'This name is required.';
+      return NAME_PATTERN.test(formatProperName(text)) ? '' : 'Use letters, spaces, hyphens, periods, or apostrophes only.';
+    case 'studentEmail':
+      if (!text) return 'Student email is required.';
+      return GMAIL_PATTERN.test(text) ? '' : 'Enter a valid Gmail address ending in @gmail.com.';
+    case 'gradeLevel':
+      return /^(7|8|9|10)$/.test(text) ? '' : 'Select a grade level.';
+    case 'section':
+      if (!text) return 'Section is required.';
+      return SECTION_PATTERN.test(formatProperName(text)) ? '' : 'Enter a valid section name using letters and name punctuation.';
+    case 'lrn':
+      if (!text) return 'LRN is required.';
+      return /^109323\d{6}$/.test(text) ? '' : 'Enter exactly 12 digits beginning with 109323.';
+    case 'parentName':
+      if (!text) return 'Parent/guardian name is required.';
+      return NAME_PATTERN.test(formatProperName(text)) ? '' : 'Use letters, spaces, hyphens, periods, or apostrophes only.';
+    case 'parentEmail':
+      if (!text) return 'Parent/guardian email is required.';
+      return GMAIL_PATTERN.test(text) ? '' : 'Enter a valid Gmail address';
+    case 'parentContact':
+      if (!text) return 'Parent contact is required.';
+      return /^09\d{9}$/.test(text) ? '' : 'Enter exactly 11 digits beginning with 09.';
+    case 'username':
+      return text ? '' : 'Username is required.';
+    case 'password':
+      if (!value) return 'Password is required.';
+      return value.length >= 8 ? '' : `Add ${8 - value.length} more character${8 - value.length === 1 ? '' : 's'}.`;
+    case 'confirmPassword':
+      if (!value) return 'Please confirm your password.';
+      return value === values.password ? '' : 'Passwords do not match.';
+    default:
+      return '';
+  }
+};
+
+const inputClass = (hasError, extra = '') =>
+  `w-full px-4 py-3 border-2 rounded-xl outline-none transition-colors ${hasError
+    ? 'border-red-500 bg-red-50 focus:border-red-600'
+    : 'border-gray-200 focus:border-primary-500'} ${extra}`;
+
+const FieldMessage = ({ error, note, success = false }) => (
+  <p className={`mt-1 text-xs ${error ? 'font-medium text-red-600' : success ? 'font-medium text-green-600' : 'text-gray-500'}`} role={error ? 'alert' : undefined}>
+    {error || note}
+  </p>
+);
+
 const RegistrationNotice = () => (
   <div className="rounded-2xl border border-yellow-200 bg-yellow-50 px-5 py-4 text-sm leading-6 text-yellow-900">
     <p className="font-bold">Important Notice</p>
@@ -26,6 +89,7 @@ const Register = () => {
     lrn: '',
     studentEmail: '',
     gradeLevel: '',
+    section: '',
     parentName: '',
     parentEmail: '',
     parentContact: '',
@@ -42,6 +106,7 @@ const Register = () => {
   });
 
   const [error, setError] = useState('');
+  const [fieldErrors, setFieldErrors] = useState({});
   const [loading, setLoading] = useState(false);
   const [showRegistrationForm, setShowRegistrationForm] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
@@ -55,15 +120,58 @@ const Register = () => {
     const { name, value } = e.target;
     const nextValue = name === 'parentContact'
       ? value.replace(/\D/g, '').slice(0, 11)
+      : name === 'lrn'
+      ? value.replace(/\D/g, '').slice(0, 12)
       : value;
-    setFormData({ ...formData, [name]: nextValue });
+    const nextFormData = { ...formData, [name]: nextValue };
+    setFormData(nextFormData);
+    setFieldErrors((current) => {
+      if (!current[name] && !(name === 'password' && current.confirmPassword)) return current;
+      return {
+        ...current,
+        [name]: validateField(name, nextValue, nextFormData),
+        ...(name === 'password' && current.confirmPassword
+          ? { confirmPassword: validateField('confirmPassword', nextFormData.confirmPassword, nextFormData) }
+          : {}),
+      };
+    });
     setError('');
+  };
+
+  const handleNameBlur = (e) => {
+    const { name, value } = e.target;
+    const nextValue = ['firstName', 'lastName', 'parentName', 'section'].includes(name)
+      ? formatProperName(value)
+      : value;
+    const nextFormData = { ...formData, [name]: nextValue };
+    setFormData(nextFormData);
+    setFieldErrors((current) => ({
+      ...current,
+      [name]: validateField(name, nextValue, nextFormData),
+    }));
   };
 
   // Handle file select
   const handleFileChange = (e) => {
     const file = e.target.files?.[0] || null;
+
+    if (file && !ALLOWED_PROOF_TYPES.includes(file.type)) {
+      e.target.value = '';
+      setFormData({ ...formData, schoolIdProof: null });
+      setFieldErrors((current) => ({ ...current, schoolIdProof: 'Choose a JPG, JPEG, PNG, or PDF file.' }));
+      setError('School ID must be a JPG, JPEG, PNG, or PDF file.');
+      return;
+    }
+
+    if (file && file.size > MAX_PROOF_SIZE) {
+      e.target.value = '';
+      setFormData({ ...formData, schoolIdProof: null });
+      setFieldErrors((current) => ({ ...current, schoolIdProof: 'The selected file is larger than 10 MB.' }));
+      setError('School ID file must not exceed 10 MB.');
+      return;
+    }
     setFormData({ ...formData, schoolIdProof: file });
+    setFieldErrors((current) => ({ ...current, schoolIdProof: file ? '' : 'School ID is required.' }));
     setError('');
   };
 
@@ -72,6 +180,24 @@ const Register = () => {
     e.preventDefault();
     setError('');
     setLoading(true);
+
+    const fieldsToValidate = [
+      'firstName', 'lastName', 'studentEmail', 'gradeLevel', 'section', 'lrn',
+      'parentName', 'parentEmail', 'parentContact', 'username', 'password', 'confirmPassword',
+    ];
+    const nextFieldErrors = Object.fromEntries(
+      fieldsToValidate
+        .map((name) => [name, validateField(name, formData[name], formData)])
+        .filter(([, message]) => message)
+    );
+    if (!formData.schoolIdProof) nextFieldErrors.schoolIdProof = 'School ID is required.';
+    setFieldErrors(nextFieldErrors);
+
+    if (Object.keys(nextFieldErrors).length) {
+      setError('Please correct the highlighted fields before continuing.');
+      setLoading(false);
+      return;
+    }
 
     if (!formData.username || !formData.password) {
       setError('Please fill in all required fields');
@@ -103,6 +229,41 @@ const Register = () => {
       return;
     }
 
+    const firstName = formatProperName(formData.firstName);
+    const lastName = formatProperName(formData.lastName);
+    const parentName = formatProperName(formData.parentName);
+
+    if (!NAME_PATTERN.test(firstName) || !NAME_PATTERN.test(lastName)) {
+      setError("Names may contain letters, spaces, hyphens, periods, and apostrophes only.");
+      setLoading(false);
+      return;
+    }
+
+    if (!NAME_PATTERN.test(parentName)) {
+      setError("Parent/guardian name may contain letters, spaces, hyphens, periods, and apostrophes only.");
+      setLoading(false);
+      return;
+    }
+
+    if (!GMAIL_PATTERN.test(formData.studentEmail.trim())) {
+      setError('Student email must be a valid @gmail.com address.');
+      setLoading(false);
+      return;
+    }
+
+    if (!GMAIL_PATTERN.test(formData.parentEmail.trim())) {
+      setError('Parent/guardian email must be a valid @gmail.com address.');
+      setLoading(false);
+      return;
+    }
+
+    const section = formatProperName(formData.section);
+    if (!/^(7|8|9|10)$/.test(formData.gradeLevel) || !SECTION_PATTERN.test(section)) {
+      setError('Select Grade 7–10 and enter a valid section name.');
+      setLoading(false);
+      return;
+    }
+
     const lrnPattern = /^109323\d{6}$/;
     if (!lrnPattern.test(formData.lrn.trim())) {
       setError('LRN must be 12 digits and start with 109323');
@@ -110,9 +271,9 @@ const Register = () => {
       return;
     }
 
-    const parentContactPattern = /^\d{11}$/;
+    const parentContactPattern = /^09\d{9}$/;
     if (!parentContactPattern.test(formData.parentContact.trim())) {
-      setError('Parent contact number must be exactly 11 digits');
+      setError('Parent contact must be 11 digits and start with 09.');
       setLoading(false);
       return;
     }
@@ -123,18 +284,24 @@ const Register = () => {
       return;
     }
 
+    if (!ALLOWED_PROOF_TYPES.includes(formData.schoolIdProof.type) || formData.schoolIdProof.size > MAX_PROOF_SIZE) {
+      setError('School ID must be a JPG, JPEG, PNG, or PDF file no larger than 10 MB.');
+      setLoading(false);
+      return;
+    }
+
     const formPayload = new FormData();
     formPayload.append('role', 'student');
-    formPayload.append('firstName', formData.firstName.trim());
-    formPayload.append('lastName', formData.lastName.trim());
+    formPayload.append('firstName', firstName);
+    formPayload.append('lastName', lastName);
     formPayload.append('username', formData.username.trim());
     formPayload.append('password', formData.password);
     formPayload.append('lrn', formData.lrn.trim());
-    formPayload.append('studentEmail', formData.studentEmail.trim());
-    formPayload.append('parentName', formData.parentName.trim());
-    formPayload.append('parentEmail', formData.parentEmail.trim());
+    formPayload.append('studentEmail', formData.studentEmail.trim().toLowerCase());
+    formPayload.append('parentName', parentName);
+    formPayload.append('parentEmail', formData.parentEmail.trim().toLowerCase());
     formPayload.append('parentContact', formData.parentContact.trim());
-    formPayload.append('gradeLevel', formData.gradeLevel.trim());
+    formPayload.append('gradeLevel', `Grade ${formData.gradeLevel} - ${section}`);
     formPayload.append('schoolIdProof', formData.schoolIdProof);
 
     const result = await register(formPayload);
@@ -226,9 +393,12 @@ const Register = () => {
                             name="firstName"
                             value={formData.firstName}
                             onChange={handleChange}
-                            className="w-full px-4 py-3 border-2 rounded-xl"
+                            onBlur={handleNameBlur}
+                            aria-invalid={Boolean(fieldErrors.firstName)}
+                            className={inputClass(Boolean(fieldErrors.firstName))}
                             placeholder="Enter your first name"
                           />
+                          <FieldMessage error={fieldErrors.firstName} note="Capitalization is corrected automatically." />
                         </div>
 
                         {/* Last Name */}
@@ -239,9 +409,12 @@ const Register = () => {
                             name="lastName"
                             value={formData.lastName}
                             onChange={handleChange}
-                            className="w-full px-4 py-3 border-2 rounded-xl"
+                            onBlur={handleNameBlur}
+                            aria-invalid={Boolean(fieldErrors.lastName)}
+                            className={inputClass(Boolean(fieldErrors.lastName))}
                             placeholder="Enter your last name"
                           />
+                          <FieldMessage error={fieldErrors.lastName} note="Capitalization is corrected automatically." />
                         </div>
 
                         {/* Student Email */}
@@ -252,22 +425,47 @@ const Register = () => {
                             name="studentEmail"
                             value={formData.studentEmail}
                             onChange={handleChange}
-                            className="w-full px-4 py-3 border-2 rounded-xl"
+                            onBlur={handleNameBlur}
+                            aria-invalid={Boolean(fieldErrors.studentEmail)}
+                            className={inputClass(Boolean(fieldErrors.studentEmail))}
                             placeholder="example@gmail.com"
                           />
+                          <FieldMessage error={fieldErrors.studentEmail} note="Must end in @gmail.com." />
                         </div>
 
                         {/* Grade Level */}
                         <div>
                           <label className="block font-semibold mb-1">Grade & Section *</label>
-                          <input
-                            type="text"
+                          <select
                             name="gradeLevel"
                             value={formData.gradeLevel}
                             onChange={handleChange}
-                            className="w-full px-4 py-3 border-2 rounded-xl"
-                            placeholder="e.g., Grade 10 - Rizal"
+                            onBlur={handleNameBlur}
+                            aria-invalid={Boolean(fieldErrors.gradeLevel)}
+                            className={inputClass(Boolean(fieldErrors.gradeLevel))}
+                          >
+                            <option value="">Select grade</option>
+                            {[7, 8, 9, 10].map((grade) => (
+                              <option key={grade} value={String(grade)}>Grade {grade}</option>
+                            ))}
+                          </select>
+                          <FieldMessage error={fieldErrors.gradeLevel} note="Choose your current grade level." />
+                        </div>
+
+                        <div>
+                          <label className="block font-semibold mb-1">Section *</label>
+                          <input
+                            type="text"
+                            name="section"
+                            value={formData.section}
+                            onChange={handleChange}
+                            onBlur={handleNameBlur}
+                            aria-invalid={Boolean(fieldErrors.section)}
+                            className={inputClass(Boolean(fieldErrors.section))}
+                            placeholder="e.g., Rizal"
+                            maxLength={50}
                           />
+                          <FieldMessage error={fieldErrors.section} note="Enter the official section name." />
                         </div>
 
                         {/* LRN */}
@@ -278,12 +476,15 @@ const Register = () => {
                             name="lrn"
                             value={formData.lrn}
                             onChange={handleChange}
-                            className="w-full px-4 py-3 border-2 rounded-xl"
+                            onBlur={handleNameBlur}
+                            aria-invalid={Boolean(fieldErrors.lrn)}
+                            className={inputClass(Boolean(fieldErrors.lrn))}
                             placeholder="109323XXXXXX"
+                            inputMode="numeric"
                             maxLength={12}
                             pattern="109323[0-9]{6}"
                           />
-                          <p className="text-xs text-gray-500 mt-1">12-digit number starting with 109323</p>
+                          <FieldMessage error={fieldErrors.lrn} note="12-digit number starting with 109323." />
                         </div>
                       </div>
                     </div>
@@ -301,9 +502,12 @@ const Register = () => {
                             name="parentName"
                             value={formData.parentName}
                             onChange={handleChange}
-                            className="w-full px-4 py-3 border-2 rounded-xl"
+                            onBlur={handleNameBlur}
+                            aria-invalid={Boolean(fieldErrors.parentName)}
+                            className={inputClass(Boolean(fieldErrors.parentName))}
                             placeholder="Enter parent/guardian full name"
                           />
+                          <FieldMessage error={fieldErrors.parentName} note="Capitalization is corrected automatically." />
                         </div>
 
                         <div>
@@ -313,9 +517,12 @@ const Register = () => {
                             name="parentEmail"
                             value={formData.parentEmail}
                             onChange={handleChange}
-                            className="w-full px-4 py-3 border-2 rounded-xl"
+                            onBlur={handleNameBlur}
+                            aria-invalid={Boolean(fieldErrors.parentEmail)}
+                            className={inputClass(Boolean(fieldErrors.parentEmail))}
                             placeholder="example@gmail.com"
                           />
+                          <FieldMessage error={fieldErrors.parentEmail} note="Must end in @gmail.com." />
                         </div>
 
                         <div>
@@ -325,13 +532,15 @@ const Register = () => {
                             name="parentContact"
                             value={formData.parentContact}
                             onChange={handleChange}
-                            className="w-full px-4 py-3 border-2 rounded-xl"
+                            onBlur={handleNameBlur}
+                            aria-invalid={Boolean(fieldErrors.parentContact)}
+                            className={inputClass(Boolean(fieldErrors.parentContact))}
                             placeholder="09XXXXXXXXX"
                             inputMode="numeric"
                             maxLength={11}
-                            pattern="[0-9]{11}"
+                            pattern="09[0-9]{9}"
                           />
-                          <p className="text-xs text-gray-500 mt-1">Enter exactly 11 digits</p>
+                          <FieldMessage error={fieldErrors.parentContact} note="11 digits starting with 09." />
                         </div>
                       </div>
                     </div>
@@ -342,14 +551,15 @@ const Register = () => {
                         <label className="block font-semibold mb-1">School ID *</label>
                         <input
                           type="file"
-                          accept="image/*,.pdf"
+                          accept=".jpg,.jpeg,.png,.pdf,image/jpeg,image/png,application/pdf"
                           onChange={handleFileChange}
-                          className="w-full px-4 py-3 border-2 rounded-xl"
+                          aria-invalid={Boolean(fieldErrors.schoolIdProof)}
+                          className={inputClass(Boolean(fieldErrors.schoolIdProof))}
                         />
                         {formData.schoolIdProof && (
                           <p className="mt-2 text-sm text-gray-600">Selected file: {formData.schoolIdProof.name}</p>
                         )}
-                        <p className="text-xs text-gray-500 mt-2">Upload a scanned or photographed copy of your school ID or enrollment proof.</p>
+                        <FieldMessage error={fieldErrors.schoolIdProof} note="JPG, JPEG, PNG, or PDF only. Maximum file size: 10 MB." />
                       </div>
                     </div>
                   </>
@@ -363,16 +573,19 @@ const Register = () => {
 
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
 
-                    <div>
+                    <div className="md:col-span-2">
                       <label className="block font-semibold mb-1">Username *</label>
                       <input
                         type="text"
                         name="username"
                         value={formData.username}
                         onChange={handleChange}
-                        className="w-full px-4 py-3 border-2 rounded-xl"
+                        onBlur={handleNameBlur}
+                        aria-invalid={Boolean(fieldErrors.username)}
+                        className={inputClass(Boolean(fieldErrors.username))}
                         placeholder="Choose a username"
                       />
+                      <FieldMessage error={fieldErrors.username} note="You will use this username to log in." />
                     </div>
 
                     <div>
@@ -383,7 +596,9 @@ const Register = () => {
                           name="password"
                           value={formData.password}
                           onChange={handleChange}
-                          className="w-full px-4 py-3 pr-12 border-2 rounded-xl"
+                          onBlur={handleNameBlur}
+                          aria-invalid={Boolean(fieldErrors.password)}
+                          className={inputClass(Boolean(fieldErrors.password), 'pr-12')}
                           placeholder="Minimum 8 characters"
                           minLength={8}
                         />
@@ -400,7 +615,19 @@ const Register = () => {
                           )}
                         </button>
                       </div>
-                      <p className="text-xs text-gray-500 mt-1">Password must be at least 8 characters</p>
+                      <div className={`mt-2 rounded-lg border px-3 py-2 text-xs ${formData.password.length >= 8
+                        ? 'border-green-200 bg-green-50 text-green-700'
+                        : 'border-yellow-200 bg-yellow-50 text-yellow-800'}`}>
+                        <p className="font-semibold">To continue, your password must:</p>
+                        <p className="mt-1">
+                          <span aria-hidden="true">{formData.password.length >= 8 ? '✓' : '○'}</span>{' '}
+                          Contain at least 8 characters
+                          {formData.password.length > 0 && formData.password.length < 8
+                            ? ` (${8 - formData.password.length} more needed)`
+                            : ''}
+                        </p>
+                      </div>
+                      {fieldErrors.password && <FieldMessage error={fieldErrors.password} />}
                     </div>
 
                     <div>
@@ -411,7 +638,9 @@ const Register = () => {
                           name="confirmPassword"
                           value={formData.confirmPassword}
                           onChange={handleChange}
-                          className="w-full px-4 py-3 pr-12 border-2 rounded-xl"
+                          onBlur={handleNameBlur}
+                          aria-invalid={Boolean(fieldErrors.confirmPassword)}
+                          className={inputClass(Boolean(fieldErrors.confirmPassword), 'pr-12')}
                           placeholder="Re-enter your password"
                           minLength={8}
                         />
@@ -428,6 +657,13 @@ const Register = () => {
                           )}
                         </button>
                       </div>
+                      <FieldMessage
+                        error={fieldErrors.confirmPassword}
+                        note={formData.confirmPassword && formData.confirmPassword === formData.password
+                          ? '✓ Passwords match.'
+                          : 'Enter the same password again.'}
+                        success={Boolean(formData.confirmPassword && formData.confirmPassword === formData.password)}
+                      />
                     </div>
                   </div>
                 </div>

@@ -7,6 +7,9 @@ import Footer from '../components/Footer'
 import PageBackground from '../components/PageBackground'
 import axios from 'axios'
 
+const MAX_PROOF_SIZE = 10 * 1024 * 1024
+const ALLOWED_PROOF_TYPES = ['image/jpeg', 'image/png', 'application/pdf']
+
 const Revalidation = () => {
   const { user } = useAuth()
   const { showToast } = useToast()
@@ -57,7 +60,20 @@ const Revalidation = () => {
   }, [showToast, user])
 
   const handleFileChange = (e) => {
-    setFile(e.target.files?.[0] || null)
+    const selectedFile = e.target.files?.[0] || null
+    if (selectedFile && !ALLOWED_PROOF_TYPES.includes(selectedFile.type)) {
+      e.target.value = ''
+      setFile(null)
+      showToast('School ID must be a JPG, JPEG, PNG, or PDF file.', 'error')
+      return
+    }
+    if (selectedFile && selectedFile.size > MAX_PROOF_SIZE) {
+      e.target.value = ''
+      setFile(null)
+      showToast('School ID file must not exceed 10 MB.', 'error')
+      return
+    }
+    setFile(selectedFile)
   }
 
   const handleSubmit = async (e) => {
@@ -237,11 +253,12 @@ const Revalidation = () => {
                 <label className="block text-sm font-semibold text-gray-700 mb-2">Upload School ID or Enrollment Proof *</label>
                 <input
                   type="file"
-                  accept="image/*,.pdf"
+                  accept=".jpg,.jpeg,.png,.pdf,image/jpeg,image/png,application/pdf"
                   onChange={handleFileChange}
                   className="w-full text-sm text-gray-700 border border-gray-300 rounded-xl p-3"
                 />
                 {file && <p className="mt-2 text-sm text-gray-500">Selected file: {file.name}</p>}
+                <p className="mt-2 text-xs text-gray-500">JPG, JPEG, PNG, or PDF only. Maximum file size: 10 MB.</p>
               </div>
 
               <button

@@ -13,7 +13,12 @@ const ConcernList = ({ isCounselor, onViewReport, onGenerateOverallReport, gener
   const [concerns, setConcerns] = useState([])
   const [filteredConcerns, setFilteredConcerns] = useState([])
   const [loading, setLoading] = useState(true)
-  const [flaggedStudents, setFlaggedStudents] = useState([])
+  const [studentActivity, setStudentActivity] = useState({
+    frequentReporters: [],
+    frequentlyInvolved: [],
+  })
+  const [schoolYears, setSchoolYears] = useState([])
+  const [activitySchoolYearId, setActivitySchoolYearId] = useState('')
   const [showFlagged, setShowFlagged] = useState(false)
   const [updatingId, setUpdatingId] = useState(null)
   const [deletingId, setDeletingId] = useState(null)
@@ -58,9 +63,24 @@ const ConcernList = ({ isCounselor, onViewReport, onGenerateOverallReport, gener
 
   useEffect(() => {
     if (isCounselor) {
-      axios.get('/api/concerns/flagged-students').then(r => setFlaggedStudents(r.data)).catch(() => {})
+      axios.get('/api/school-years')
+        .then(({ data }) => {
+          setSchoolYears(data)
+          setActivitySchoolYearId(current => current || String(data.find(year => year.status === 'active')?.id || data[0]?.id || ''))
+        })
+        .catch(() => {})
     }
-  }, [isCounselor, refreshKey, concerns])
+  }, [isCounselor])
+
+  useEffect(() => {
+    if (!isCounselor || !activitySchoolYearId) return
+
+    axios.get('/api/concerns/flagged-students', {
+      params: { schoolYearId: activitySchoolYearId },
+    })
+      .then(({ data }) => setStudentActivity(data))
+      .catch(() => setStudentActivity({ frequentReporters: [], frequentlyInvolved: [] }))
+  }, [isCounselor, activitySchoolYearId, refreshKey, concerns])
 
   useEffect(() => {
     const token = localStorage.getItem('token')
@@ -183,7 +203,20 @@ const ConcernList = ({ isCounselor, onViewReport, onGenerateOverallReport, gener
     }
   }
 
-  const flaggedWithMultiple = flaggedStudents.filter(s => s.concernCount >= 2)
+  const frequentReporters = studentActivity.frequentReporters || []
+  const frequentlyInvolved = studentActivity.frequentlyInvolved || []
+  const activityStudentCount = new Set([
+    ...frequentReporters.map(student => student.id),
+    ...frequentlyInvolved.map(student => student.id),
+  ]).size
+  const selectedActivitySchoolYear = schoolYears.find(year => String(year.id) === String(activitySchoolYearId))
+  const activityTitle = selectedActivitySchoolYear?.status === 'active'
+    ? 'Student Concern Activity'
+    : 'Historical Concern Activity'
+
+  const formatAccountStatus = (status) => String(status || '')
+    .replaceAll('_', ' ')
+    .replace(/\b\w/g, letter => letter.toUpperCase())
 
   const pagedConcerns = useMemo(() => {
     const start = (currentPage - 1) * PAGE_SIZE
@@ -201,13 +234,13 @@ const ConcernList = ({ isCounselor, onViewReport, onGenerateOverallReport, gener
           </h2>
         </div>
         <div className="flex flex-wrap gap-2">
-          {isCounselor && flaggedWithMultiple.length > 0 && (
+          {isCounselor && (
             <button
               onClick={() => setShowFlagged(v => !v)}
               className="px-4 py-2 bg-amber-500 text-white rounded-lg hover:bg-amber-600 transition font-semibold text-sm flex items-center gap-1"
             >
               <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20"><path d="M3 6a3 3 0 013-3h10l-4 4 4 4H6a3 3 0 01-3-3V6z" /></svg>
-              Flagged Students ({flaggedWithMultiple.length})
+              {activityTitle} ({activityStudentCount})
             </button>
           )}
           {isCounselor && (
@@ -242,25 +275,64 @@ const ConcernList = ({ isCounselor, onViewReport, onGenerateOverallReport, gener
         </div>
       </div>
 
-      {isCounselor && showFlagged && flaggedWithMultiple.length > 0 && (
+      {isCounselor && showFlagged && (
         <div className="mb-6 p-4 bg-amber-50 border border-amber-200 rounded-xl">
-          <h3 className="font-bold text-amber-800 mb-3 text-sm">Students with Multiple Concerns</h3>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
-            {flaggedWithMultiple.map(s => {
-              const color = s.concernCount >= 4 ? 'bg-red-100 text-red-800 border-red-200' :
-                            s.concernCount >= 2 ? 'bg-amber-100 text-amber-800 border-amber-200' :
-                            'bg-gray-100 text-gray-700 border-gray-200'
-              return (
-                <button
-                  key={s.id}
-                  onClick={() => navigate(`/dashboard/student/${s.id}`)}
-                  className={`flex items-center justify-between p-2 rounded-lg border text-sm ${color} hover:shadow-sm transition text-left`}
-                >
-                  <span className="font-medium">{s.firstName} {s.lastName}</span>
-                  <span className="font-bold ml-2">{s.concernCount} reports</span>
-                </button>
-              )
-            })}
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
+            <div>
+              <h3 className="font-bold text-amber-900 text-sm">{activityTitle}</h3>
+              <p className="text-xs text-amber-800">Students appearing in at least two concerns. Archived records remain included for audit history.</p>
+            </div>
+            <label className="flex items-center gap-2 text-xs font-semibold text-amber-900">
+              School Year
+              <select
+                value={activitySchoolYearId}
+                onChange={event => setActivitySchoolYearId(event.target.value)}
+                className="rounded-lg border border-amber-300 bg-white px-3 py-2 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-amber-400"
+              >
+                {schoolYears.map(year => (
+                  <option key={year.id} value={year.id}>
+                    {year.label}{year.status === 'active' ? ' (Active)' : ''}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            {[
+              { title: 'Frequent Reporters', students: frequentReporters, countKey: 'reportCount', suffix: 'raised' },
+              { title: 'Frequently Involved', students: frequentlyInvolved, countKey: 'involvedCount', suffix: 'involved' },
+            ].map(group => (
+              <section key={group.title} className="rounded-lg border border-amber-200 bg-white/70 p-3">
+                <h4 className="mb-2 text-sm font-bold text-gray-800">{group.title}</h4>
+                {group.students.length === 0 ? (
+                  <p className="text-xs text-gray-600">No students reached the two-concern threshold for this school year.</p>
+                ) : (
+                  <div className="space-y-2">
+                    {group.students.map(student => (
+                      <button
+                        key={student.id}
+                        onClick={() => navigate(`/dashboard/student/${student.id}`)}
+                        className="flex w-full items-center justify-between rounded-lg border border-amber-200 bg-amber-100 p-2 text-left text-sm text-amber-900 transition hover:shadow-sm"
+                      >
+                        <span>
+                          <span className="block font-medium">{student.firstName} {student.lastName}</span>
+                          {student.accountStatus && student.accountStatus !== 'active' && (
+                            <span className="block text-xs text-gray-600">{formatAccountStatus(student.accountStatus)}</span>
+                          )}
+                        </span>
+                        <span className="ml-2 text-right">
+                          <span className="block font-bold">{student[group.countKey]} {group.suffix}</span>
+                          <span className="block text-xs font-medium text-amber-800">
+                            {student.currentCount} non-archived · {student.archivedCount} archived
+                          </span>
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </section>
+            ))}
           </div>
         </div>
       )}

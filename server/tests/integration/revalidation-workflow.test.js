@@ -268,6 +268,41 @@ describe("Annual enrollment revalidation workflow", () => {
         expect(loginRes.body.message).toMatch(/graduated/i);
     });
 
+    it("lets counselors mark a Grade 10 pending revalidation student as graduated from view account", async () => {
+        const grade10Student = await createTestStudent(pool);
+        await pool.query(
+            `INSERT INTO student_records (lrn, first_name, last_name, grade_level, section)
+             VALUES (?, ?, ?, ?, ?)`,
+            [grade10Student.user.lrn, grade10Student.user.first_name, grade10Student.user.last_name, "Grade 10", "Mabini"]
+        );
+        await pool.query(
+            `UPDATE users
+             SET account_status = 'pending_revalidation',
+                 revalidation_submission_unlocked = TRUE
+             WHERE id = ?`,
+            [grade10Student.user.id]
+        );
+
+        const graduateRes = await request
+            .patch(`/api/revalidation-requests/students/${grade10Student.user.id}/mark-graduated`)
+            .set("Authorization", `Bearer ${counselor.token}`);
+
+        expect(graduateRes.status).toBe(200);
+        expect(graduateRes.body).toMatchObject({
+            message: "Student marked as graduated.",
+            studentStatus: "graduated",
+        });
+
+        const [rows] = await pool.query(
+            "SELECT account_status, revalidation_submission_unlocked FROM users WHERE id = ?",
+            [grade10Student.user.id]
+        );
+        expect(rows[0]).toMatchObject({
+            account_status: "graduated",
+            revalidation_submission_unlocked: 0,
+        });
+    });
+
     it("allows catch-up revalidation for students who missed multiple school years", async () => {
         await cleanAllTables(pool);
         const catchUpStudent = await createTestStudent(pool);

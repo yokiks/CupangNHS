@@ -19,6 +19,11 @@ test-results/
 *.sqlite
 *.sqlite3
 server/cupang_nhs.db
+/cupangnhs.sql
+
+# Runtime uploads (may contain student personal data)
+server/uploads/*
+!server/uploads/.gitkeep
 
 # IDE
 .vscode/

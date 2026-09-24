@@ -26,16 +26,16 @@ beforeAll(async () => {
     const pw = await hash.hash("Test1234!", 10);
 
     const [r1] = await pool.query(
-        `INSERT INTO users (first_name, last_name, username, password_hash, role, lrn, email)
-         VALUES (?, ?, ?, ?, 'student', ?, ?)`,
+        `INSERT INTO users (first_name, last_name, username, password_hash, role, lrn, email, account_status)
+         VALUES (?, ?, ?, ?, 'student', ?, ?, 'active')`,
         ["Involved", "One", `inv1_${Date.now()}`, pw, "301420000101", `inv1_${Date.now()}@test.com`]
     );
     const [u1] = await pool.query("SELECT * FROM users WHERE id = ?", [r1.insertId]);
     involved1 = { user: u1[0] };
 
     const [r2] = await pool.query(
-        `INSERT INTO users (first_name, last_name, username, password_hash, role, lrn, email)
-         VALUES (?, ?, ?, ?, 'student', ?, ?)`,
+        `INSERT INTO users (first_name, last_name, username, password_hash, role, lrn, email, account_status)
+         VALUES (?, ?, ?, ?, 'student', ?, ?, 'active')`,
         ["Involved", "Two", `inv2_${Date.now()}`, pw, "301420000102", `inv2_${Date.now()}@test.com`]
     );
     const [u2] = await pool.query("SELECT * FROM users WHERE id = ?", [r2.insertId]);
@@ -85,6 +85,36 @@ describe("Involved students on concern creation", () => {
             [res.body.id]
         );
         expect(rows.length).toBe(0);
+    });
+
+    it("should reject inactive and self-selected involved students", async () => {
+        await pool.query("UPDATE users SET account_status = 'inactive' WHERE id = ?", [involved2.user.id]);
+
+        const inactiveRes = await request
+            .post("/api/concerns")
+            .set("Authorization", `Bearer ${reporter.token}`)
+            .send({
+                title: "Inactive Student Selection",
+                description: "This should not be created",
+                category: "general",
+                involvedStudentIds: [involved2.user.id],
+            });
+        expect(inactiveRes.status).toBe(400);
+        expect(inactiveRes.body.message).toMatch(/no longer active/i);
+
+        const selfRes = await request
+            .post("/api/concerns")
+            .set("Authorization", `Bearer ${reporter.token}`)
+            .send({
+                title: "Self Selection",
+                description: "This should not be created",
+                category: "general",
+                involvedStudentIds: [reporter.user.id],
+            });
+        expect(selfRes.status).toBe(400);
+        expect(selfRes.body.message).toMatch(/yourself/i);
+
+        await pool.query("UPDATE users SET account_status = 'active' WHERE id = ?", [involved2.user.id]);
     });
 
     it("counselor GET /api/concerns should include involvedStudents", async () => {
@@ -176,6 +206,22 @@ describe("Student search and profile", () => {
             .set("Authorization", `Bearer ${reporter.token}`);
         expect(res.status).toBe(200);
         expect(res.body.length).toBeGreaterThanOrEqual(2);
+    });
+
+    it("should exclude the requester and non-active students from search", async () => {
+        await pool.query("UPDATE users SET account_status = 'graduated' WHERE id = ?", [involved2.user.id]);
+
+        const requesterRes = await request
+            .get("/api/students/search?q=Test Student")
+            .set("Authorization", `Bearer ${reporter.token}`);
+        expect(requesterRes.body.some((student) => student.id === reporter.user.id)).toBe(false);
+
+        const graduatedRes = await request
+            .get("/api/students/search?q=Involved Two")
+            .set("Authorization", `Bearer ${reporter.token}`);
+        expect(graduatedRes.body.some((student) => student.id === involved2.user.id)).toBe(false);
+
+        await pool.query("UPDATE users SET account_status = 'active' WHERE id = ?", [involved2.user.id]);
     });
 
     it("should return empty for short queries", async () => {

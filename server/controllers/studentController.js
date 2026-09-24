@@ -19,11 +19,13 @@ export const searchStudents = async (req, res) => {
                 `SELECT id, first_name, last_name, lrn
                  FROM users
                  WHERE role = 'student'
+                   AND account_status = 'active'
+                   AND id <> ?
                    AND (first_name LIKE ? OR last_name LIKE ? OR lrn LIKE ?
                         OR CONCAT(first_name, ' ', last_name) LIKE ?)
                  ORDER BY last_name, first_name
                  LIMIT 20`,
-                [term, term, term, term]
+                [req.user.id, term, term, term, term]
             );
             return res.json(
                 rows.map((r) => ({
